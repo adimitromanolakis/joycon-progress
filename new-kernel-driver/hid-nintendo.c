@@ -29,6 +29,11 @@
 #define USB_DEVICE_ID_NINTENDO_JOYCONR	0x2007
 #define USB_DEVICE_ID_NINTENDO_PROCON	0x2009
 
+//XXXnot correct
+#define USB_DEVICE_ID_NINTENDO_JOYCON_GRIPL	0x200e
+
+//WRONG
+#define USB_DEVICE_ID_NINTENDO_JOYCON_GRIPR	0x210e
 
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -39,6 +44,11 @@
 #include <linux/module.h>
 #include <linux/power_supply.h>
 #include <linux/spinlock.h>
+
+
+int hid_debug = 1;
+#define hid_dbg(hid, fmt, arg...)			\
+	printk(fmt, ##arg)
 
 /*
  * Reference the url below for the following HID report defines:
@@ -373,7 +383,6 @@ static int __joycon_hid_send(struct hid_device *hdev, u8 *data, size_t len)
 		return -ENOMEM;
 
 	sprintf(buf2,"Send output report: n=%d   ",(int)len);
-
 	for(i=0;i<len;i++) { sprintf(buf2+strlen(buf2),"%02x ", data[i]); } 
 	printk("%s\n",buf2);
 		
@@ -511,6 +520,7 @@ static int joycon_set_player_leds(struct joycon_ctlr *ctlr, u8 flash, u8 on)
 static const u16 DFLT_STICK_CAL_CEN = 2000;
 static const u16 DFLT_STICK_CAL_MAX = 3500;
 static const u16 DFLT_STICK_CAL_MIN = 500;
+
 static int joycon_request_calibration(struct joycon_ctlr *ctlr)
 {
 	struct joycon_subcmd_request *req;
@@ -766,7 +776,7 @@ static void joycon_parse_report(struct joycon_ctlr *ctlr,
 		/* report buttons */
 		input_report_key(dev, BTN_TL, btns & JC_BTN_L);
 		input_report_key(dev, BTN_TL2, btns & JC_BTN_ZL);
-		if (id != USB_DEVICE_ID_NINTENDO_PROCON) {
+		if (id != USB_DEVICE_ID_NINTENDO_PROCON && id !=USB_DEVICE_ID_NINTENDO_JOYCON_GRIPL) {
 			/* Report the S buttons as the non-existent triggers */
 			input_report_key(dev, BTN_TR, btns & JC_BTN_SL_L);
 			input_report_key(dev, BTN_TR2, btns & JC_BTN_SR_L);
@@ -799,7 +809,7 @@ static void joycon_parse_report(struct joycon_ctlr *ctlr,
 		/* report buttons */
 		input_report_key(dev, BTN_TR, btns & JC_BTN_R);
 		input_report_key(dev, BTN_TR2, btns & JC_BTN_ZR);
-		if (id != USB_DEVICE_ID_NINTENDO_PROCON) {
+		if (id != USB_DEVICE_ID_NINTENDO_PROCON && id !=USB_DEVICE_ID_NINTENDO_JOYCON_GRIPL) {
 			/* Report the S buttons as the non-existent triggers */
 			input_report_key(dev, BTN_TL, btns & JC_BTN_SL_R);
 			input_report_key(dev, BTN_TL2, btns & JC_BTN_SR_R);
@@ -1012,9 +1022,18 @@ static int joycon_input_create(struct joycon_ctlr *ctlr)
 	case USB_DEVICE_ID_NINTENDO_JOYCONL:
 		name = "Nintendo Switch Left Joy-Con";
 		break;
+
 	case USB_DEVICE_ID_NINTENDO_JOYCONR:
 		name = "Nintendo Switch Right Joy-Con";
 		break;
+
+	case USB_DEVICE_ID_NINTENDO_JOYCON_GRIPL:
+		name = "Nintendo Switch Grip Left Joy-Con";
+		break;	
+	case USB_DEVICE_ID_NINTENDO_JOYCON_GRIPR:
+		name = "Nintendo Switch Grip Right Joy-Con";
+		break;
+
 	default: /* Should be impossible */
 		hid_err(hdev, "Invalid hid product\n");
 		return -EINVAL;
@@ -1381,6 +1400,10 @@ static int joycon_ctlr_handle_event(struct joycon_ctlr *ctlr, u8 *data,
 			    data[0] != JC_INPUT_SUBCMD_REPLY)
 				break;
 			report = (struct joycon_input_report *)data;
+
+			printk("Received a report of type %x while waiting for byte %x\n", report->reply.id, 
+				ctlr->subcmd_ack_match);
+
 			if (report->reply.id == ctlr->subcmd_ack_match)
 				match = true;
 			break;
@@ -1391,9 +1414,19 @@ static int joycon_ctlr_handle_event(struct joycon_ctlr *ctlr, u8 *data,
 		if (match) {
 			memcpy(ctlr->input_buf, data,
 			       min(size, (int)JC_MAX_RESP_SIZE));
+
+
 			ctlr->msg_type = JOYCON_MSG_TYPE_NONE;
 			ctlr->received_resp = true;
 			wake_up(&ctlr->wait);
+
+if(1) {
+	char buf2[512];
+	int i;
+	sprintf(buf2,"Received report: n=%d   ",(int)size);
+	for(i=0;i<size;i++) { sprintf(buf2+strlen(buf2),"%02x ", data[i]); } 
+	printk("%s\n",buf2);
+}
 
 			/* This message has been handled */
 			return 1;
@@ -1475,8 +1508,13 @@ static int nintendo_hid_probe(struct hid_device *hdev,
 	/* Initialize the controller */
 	mutex_lock(&ctlr->output_mutex);
 	/* if handshake command fails, assume ble pro controller */
-	if (hdev->product == USB_DEVICE_ID_NINTENDO_PROCON &&
+	if ( 
+		(hdev->product == USB_DEVICE_ID_NINTENDO_PROCON || hdev->product == USB_DEVICE_ID_NINTENDO_JOYCON_GRIPL)
+		&&
 	    !joycon_send_usb(ctlr, JC_USB_CMD_HANDSHAKE)) {
+			
+		printk("Detected nintento USB:  INIT\n");
+
 		hid_dbg(hdev, "detected USB controller\n");
 		/* set baudrate for improved latency */
 		ret = joycon_send_usb(ctlr, JC_USB_CMD_BAUDRATE_3M);
@@ -1589,12 +1627,19 @@ static void nintendo_hid_remove(struct hid_device *hdev)
 static const struct hid_device_id nintendo_hid_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_NINTENDO,
 			 USB_DEVICE_ID_NINTENDO_PROCON) },
+
+	{ HID_USB_DEVICE(USB_VENDOR_ID_NINTENDO,
+			 USB_DEVICE_ID_NINTENDO_JOYCON_GRIPL) },
+	{ HID_USB_DEVICE(USB_VENDOR_ID_NINTENDO,
+			 USB_DEVICE_ID_NINTENDO_JOYCON_GRIPR) },
+
 	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_NINTENDO,
 			 USB_DEVICE_ID_NINTENDO_PROCON) },
 	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_NINTENDO,
 			 USB_DEVICE_ID_NINTENDO_JOYCONL) },
 	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_NINTENDO,
 			 USB_DEVICE_ID_NINTENDO_JOYCONR) },
+
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, nintendo_hid_devices);
