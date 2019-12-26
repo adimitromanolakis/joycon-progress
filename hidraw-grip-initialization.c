@@ -74,13 +74,17 @@ int read_response(int fd, unsigned char *buf)
 	int res = read(fd, buf, 164);
 	if (res < 0) {
 		perror("read_response: Error in read ");
-	} else {
-		printf("read_response: (n=%3d):\t", res);
+		return 0;
+	} 
 
-		for (i = 0; i < res; i++)
-			printf("%02x ", (int)buf[i]);
-		printf("\n");
-	}
+	return res;
+
+	printf("read_response: (n=%3d):\t", res);
+
+	for (i = 0; i < res; i++)
+		printf("%02x ", (int)buf[i]);
+	printf("\n");
+
 
 	return res;
 }
@@ -232,7 +236,7 @@ void wait_for(int pos, unsigned char value) {
 	for(i=0;i<30;i++) printf("%2d ",i);printf("\n");
 
 	while(1) { 
-		hex_dump(response_buf,32);
+		if(response_buf[0] == 0x81) hex_dump(response_buf,32);
 		if(response_buf[pos] == value) break; 
 		read(fd,response_buf,64);
 	 }
@@ -434,91 +438,113 @@ printf("\n---- INIT ----\n");
 	
 
 
-    buf[0] = 0; // Factory mode
-    joycon_send_subcommand(fd, 0x1, 0x8, buf, 1, response_buf);
-	wait_for(0,0x81);
+//    buf[0] = 0; // Factory mode
+    //joycon_send_subcommand(fd, 0x1, 0x8, buf, 1, response_buf);
+	//wait_for(0,0x81);
 
-
-
-
-
-
-	
-	{ char cmd_home_light[30] = { 0x21,0x13, /*minicycle */0xf0,0xff, 0xf7     }; joycon_send_subcommand(fd, 0x1, 0x38, cmd_home_light, 10, response_buf );  }
+if(0) {	
+	{ char cmd_home_light[30] = { 0x21,0x12, /*minicycle */0xf0,0x97, 0x97     }; joycon_send_subcommand(fd, 0x1, 0x38, cmd_home_light, 5, response_buf );  }
 	//usleep(20000);
 	wait_for(0,0x81);
+}
 
-	memset(buf, 0x00, 0x400);
     buf[0] = 0x01; // 
-    joycon_send_subcommand(fd, 0x1, 0x48, buf, 1, response_buf);
-	wait_for(0,0x81);
-
-	for(i=0;i<10;i++) { read(fd,buf,64); }
-	//usleep(30000);
+    //joycon_send_subcommand(fd, 0x1, 0x48, buf, 1, response_buf);
+	//wait_for(0,0x81);
 
 
 
-
-
-
-
-    
     // Enable IMU data
-    memset(buf, 0x00, 0x400);
     buf[0] = 0x01; // 
     joycon_send_subcommand(fd, 0x1, 0x40, buf, 1, response_buf);
 	wait_for(0,0x81);
 
+    //buf[0] = 0x030; // 
+   // joycon_send_subcommand(fd, 0x1, 0x3, buf, 1, response_buf);
+	//wait_for(0,0x81);
 
 
 
+    //joycon_send_subcommand(fd, 0x1, 0x20, buf, 0, response_buf);
+	//wait_for(0,0x81);
+   
+
+	// Get information for joy cons
     buf[0] = 0x01; // 
     joycon_send_subcommand(fd, 0x1, 0x2, buf, 0, response_buf);
 	wait_for(0,0x81);
 
+    joycon_send_subcommand(fd, 0x1, 0x50, buf, 0, response_buf);
+	wait_for(0,0x81);
 
 	printf("GET DATA:"); hex_dump(response_buf,64);
-	exit(1);
+
+	int bat =  ((int)response_buf[25]) + (((int)response_buf[26]) <<8);
+	printf("Battery level = %.2f V\n",(double)bat*2.5/1000);
 
 
-	if(1) while(1) {
-		read(fd,buf,128);
-		hex_dump(buf,64);
-		    joycon_send_subcommand(fd, 0x1, 0x2, buf, 0, response_buf);
-
-	}
-
-	
    	usleep(10000);
-	
 
 
-	buf[0] = 0x1;
-//    joycon_send_subcommand(fd, 0x1, 0x3, buf, 2, NULL);
+	buf[0] = 0x30;
+    joycon_send_subcommand(fd, 0x1, 0x3, buf, 1, NULL);
+	wait_for(0,0x81);
 
-//	usleep(150000);
+
 	int n;
-	n = joycon_send_command(fd, 0x1f, NULL ,0 , buf);
-
+	//n = joycon_send_command(fd, 0x1f, NULL ,0 , buf);
 
 	/* Get a report from the device */
 	int cnt = 0;
 
 
-
-	if(0) for(int i=0;i<5;i++) {
-			res = read(fd, buf, 64);
-			printf("%x\n",buf[0]);
-	}
-
 	clock_start();
 
+	int duration_n = 0;
+	float duration = 0;
+
+	for(int i=0;i<10;i++) res = read(fd, buf, 64);
+
+
+
+//#define WEIRD_VIBRATION_TEST 0
+
+#ifdef WEIRD_VIBRATION_TEST
+while(1)
+    for(int l = 0x10; l < 0x20; l++)
+    {
+        for(int i = 0; i < 8; i++)
+        {
+            for(int k = 0; k < 256; k++)
+            {
+                memset(buf, 0, 0x400);
+                for(int j = 0; j <= 8; j++)
+                {
+                    buf[1+i] = 0x1;//(i + j) & 0xFF;
+                }
+                
+                // Set frequency to increase
+                buf[1+0] = k;
+                
+              
+                joycon_send_command(fd, 0x10, (uint8_t*)buf, 0x9,response_buf);
+                printf("Sent %x %x %u\n", i & 0xFF, l, k);
+            }
+        }
+    }
+#endif
+
+
+
+
+
+
+
+	
+ 
 	while(1) {
 	
 	    //joycon_send_subcommand(fd, 0x2, 0x2, buf, 0, NULL);
-		//usleep(10000);
-		//while(timer_elapsed() < 15000);
-		//usleep(9*1000);
 		int n ;
 		cnt++;
 		
@@ -534,7 +560,18 @@ read_again:
 		double t = clock_measure()*1000;
 		clock_start();
 
+		duration += t;
+		duration_n ++;
+		if(duration_n > 40) {
+			printf("FPS=%f\n", 1000 / (duration/duration_n) );
+			duration = 0;
+			duration_n = 0;
+		//	n = joycon_send_command(fd, 0x1f, buf ,0 , NULL);
+			//exit(1);
+		}
+
 //		printf("t=%f\n",clock_measure());
+continue;
 
 		printf("main: diff=%10.2f  (n=%3d):\t", t, res);
 		
@@ -544,7 +581,7 @@ read_again:
 		for (i = 0; i < res; i++) printf("%02x ", (int)buf[i]);
 		printf("\n");
 
-		if(buf[0]==0x81 && buf[1]==1) {
+		if(0)		if(buf[0]==0x81 && buf[1]==1) {
 			printf("  going to init again");
 			goto again;
 		}

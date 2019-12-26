@@ -22,11 +22,30 @@ int sockfd = -99;
 
 char buffer[MAXLINE]; 
 
+#include  <time.h>
+#include <sys/time.h>
+
+struct timeval  tv1, tv2;
+
+// [[Rcpp::export]]
+double timer_start() {
+  gettimeofday(&tv1, NULL);
+}
+
+// [[Rcpp::export]]
+double timer_elapsed() {
+   gettimeofday(&tv2, NULL);
+   
+   double time =          (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
+     (double) (tv2.tv_sec - tv1.tv_sec);
+
+   return time;
+}
+
 
 // [[Rcpp::export]]
 std::string udp_message() { 
-  
-  
+
   char *hello = (char*)"Hello from server"; 
   struct sockaddr_in servaddr, cliaddr; 
   
@@ -37,8 +56,6 @@ std::string udp_message() {
       perror("socket creation failed"); 
       exit(EXIT_FAILURE); 
     } 
-    
-    
     
     memset(&servaddr, 0, sizeof(servaddr)); 
     memset(&cliaddr, 0, sizeof(cliaddr)); 

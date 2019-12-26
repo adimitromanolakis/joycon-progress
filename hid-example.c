@@ -48,6 +48,9 @@ extern void udp_send(char *message);
 
 const char *bus_str(int bus);
 
+int debug_responses = 1;
+
+
 void hid_list() 
 {
        DIR * d = opendir("/dev");
@@ -78,6 +81,7 @@ void hid_list()
 
 		}
 }
+
 
 
 void
@@ -114,16 +118,11 @@ print_bar(int value)
 
 
 int fd;
-
-
 unsigned char rumble_data[8];
 int cmd_count = 1;
 
-
 void print_buf(unsigned char *buf, int len) {
 		int i;
-
-
 		printf("         ", len); for (i = 0; i < len; i++) printf("%2d ", (int) i);
 		printf("\n");
 
@@ -132,9 +131,9 @@ void print_buf(unsigned char *buf, int len) {
 
 }
 
-
 unsigned char response[128];
 
+#define DD if(debug_responses) 
 
 void hid_send_command(int cmd, unsigned char *data, int len) {
 
@@ -151,8 +150,8 @@ void hid_send_command(int cmd, unsigned char *data, int len) {
 
 
 	write(fd, buf, 2+8 + len);
-	printf("---- hid_send_command ---\n");
-	print_buf(data,len);
+	DD printf("---- hid_send_command ---\n");
+	DD print_buf(data,len);
 
 
 	while(1) {
@@ -163,46 +162,116 @@ void hid_send_command(int cmd, unsigned char *data, int len) {
 
 		} 
 
-		if(response[0] == 0x31) continue;
+		if(response[0]  != 0x21) continue;
+		if(response[14] != data[0]) continue;
 
-		
-		print_buf(response,res);
-
+		DD if(len > 0) printf("Response to command %x:\n", data[0]);
+		DD print_buf(response,res);
 		break;
-
-		
-
 	}
-
-
-
-
-
-
 }
 
 
 void hid_send_command_1(int cmd, unsigned char cmd_byte0) {
-	char buf[8];	
+	char buf[2];	
 	buf[0] = cmd_byte0;
 	hid_send_command(cmd,buf,1);
 }
 
 void hid_send_command_2(int cmd, unsigned char cmd_byte0, unsigned char cmd_byte1) {
-	char buf[8];	
+	char buf[2];	
 	buf[0] = cmd_byte0;
 	buf[1] = cmd_byte1;
 	hid_send_command(cmd,buf,2);
 }
 
 
-void read_spi(int addr, int len)
+unsigned char * read_spi(int addr, int len)
 {
-	char cmd1[10] = { 0x10,0x05,0x20,0,0,16};
+	char cmd1[10] = { 0x10,0x05,0x20,0,0,len};
 	int *pnt = (int*) & cmd1[1];
 	*pnt = addr;
 
 	hid_send_command(0x1, cmd1, 6 );
+	return &response[20];
+}
+
+
+void spi_dump(int addr, int len)
+{
+
+	debug_responses = 0;
+	hid_send_command_2(1,0x3,0x3f);
+
+	printf("        ");
+
+	for(int i=0;i<16;i++) {
+		printf("%2x ",i);
+	}
+
+	printf("\n");
+
+	
+	while(len > 0) {
+		len -= 16;
+
+		unsigned char *data = read_spi(addr,16);
+
+		printf("%06x  ",addr);
+		for(int i=0;i<16;i++) printf("%02x ", data[i]);
+
+
+		printf("    ");
+
+		for(int i=0;i<16;i++) {
+			unsigned char c = data[i];
+			if(c<32) c = ' ';
+			if(c>128) c = ' ';
+			printf("%c",c);
+		}
+
+		
+		printf("\n");
+		addr += 16;
+	}
+
+}
+
+
+int16_t read_int(unsigned char *p) {
+	int16_t num;
+	unsigned char *p2 = (unsigned char *)&num;
+	p2[0] = p[0];
+	p2[1] = p[1];
+	return num;
+}
+
+void read_calibration()
+{
+	int addr = 0x6000;
+
+	int pos = 0;
+	
+	unsigned char calib_data[256];
+
+	while(pos < 128) {
+		unsigned char * data;
+		data = read_spi(addr,16);
+		memcpy(calib_data + pos, data, 16);
+		pos += 16;
+		addr += 16;
+	}
+
+	for(int i=0;i<128;i++)  printf("%02x ", calib_data[i]);	
+	printf("\n");
+
+	unsigned char * pointer = &calib_data[0x20];
+
+	for(int i=0;i<12;i++) {
+
+		printf("data %d:  %2x %2x  int=%d\n", i, (int)pointer[0], (int)pointer[1], (int)read_int(pointer)  );
+		pointer += 2;
+	}
 
 }
 
@@ -395,9 +464,29 @@ char link_key_cmd[20] = { 1,2,
 hid_send_command_2(1, 0x8, 0x0); // set_factory_mode 0
 
 hid_send_command_2( 1, 0x40, 0x1);
-
 hid_send_command_2( 1, 0x3, 0x30);
 hid_send_command_1( 1, 0x20);
+
+	char cmd_gyro[10] = { 0x41, 3,0,0,0 };
+
+	hid_send_command(0x1, cmd_gyro, 5 );
+
+	//while(1) { read(fd,response,64); print_buf(response,50); if(response[0] == 0x21 && response[14]==0x41) break; }
+	{ 
+		hid_send_command_1(1, 0x50);
+		int b = 2.5 * ( (  (int)response[16] ) << 8 | ((int)response[15]) );
+		float voltage = (float)b/1000;
+		printf("BAT VOLT=%.4f PERCENT=%2.1f\n", voltage,  100*(voltage-3.1)/(4.1-3.1) ) ;
+	}
+
+	spi_dump(0x2000, 256);
+	
+
+	spi_dump(0x6000, 256);
+	read_calibration();
+	exit(1);
+
+
 
 	//int pipe_fd = open("pipe",O_WRONLY);
 	udp_init();
@@ -408,6 +497,11 @@ hid_send_command_1( 1, 0x20);
 	clock_start();
 	int time_sum_n = 0;
 	double time_sum;
+
+
+	int report_type = 1;
+
+	if(getenv("REPORT")) { int r = atoi(getenv("REPORT")); report_type = r; }
 
 
 
@@ -441,7 +535,7 @@ hid_send_command_1( 1, 0x20);
 		prev_time = time;
 
 
-		if(1) for (i = 0; i < res; i++)
+		if(report_type & 1) for (i = 0; i < res; i++)
 			printf("%02hhx ", buf[i]);
 		printf("  ");
 
@@ -452,7 +546,7 @@ hid_send_command_1( 1, 0x20);
 		int start = 13;
 		short int *p = (short int *) (&buf[start]);
 
-		if(1) {
+		if(report_type & 2) {
 			int z=0;
 
 			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
@@ -477,8 +571,9 @@ hid_send_command_1( 1, 0x20);
 		}
 
 
-		if(0) {
+		if(report_type & 4) {
 			int z=0;
+			char str1[256], str2[256], str3[256];
 
 			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
 			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
@@ -486,7 +581,14 @@ hid_send_command_1( 1, 0x20);
 			printf("%6d %6d %6d     ", (int)G0,(int)G1,(int) G2);
 			printf(" A %6d %6d %6d  ", (int)A0,(int)A1,(int) A2);
 
+			sprintf(str1 , "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
 
+			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
+			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
+
+			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2);
+			printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
+			sprintf(str2, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
 
 			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
 			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
@@ -494,17 +596,11 @@ hid_send_command_1( 1, 0x20);
 			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2);
 			printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
 
-			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
-			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
+			sprintf(str3, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
 
-			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2);
-			printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
-
-		char str[256];
-			sprintf(str , "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
-			udp_send(str);
-
-			//write(pipe_fd,str,strlen(str));
+			udp_send(str3);
+			udp_send(str2);
+			udp_send(str1);
 		}
 
 		printf("\n");

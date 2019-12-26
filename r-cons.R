@@ -1,15 +1,46 @@
 library(Rcpp)
-setwd("~/tmp/joycons/")
 module = Rcpp::sourceCpp("r-joycons-udpread.cpp")
 module
 
-for(i in 1:200) { x <- udp_message(); cat(x) }
+mag = function(a,b,c) sqrt(a*a + b*b + c*c)
 
-time1 = system.time( m <- plyr::ldply(lapply(1:700 , function(i) { read.table(textConnection(udp_message() ))  } )  )  )
+
+for(j in 1:3)
+for(i in 1:222) { 
+  
+  timer_start();
+  x <- udp_message(); 
+  
+  dt = timer_elapsed();
+  cat(i, dt*1000, x) 
+  
+  if(dt*1000>10) break();
+}
+
+
+
+
+time1 = system.time( m <- plyr::ldply(lapply(1:1500 , function(i) { read.table(textConnection(udp_message() ))  } )  )  )
+
+
 
 #cal = apply(m,2,mean)
-
 #earth = mean(mag(m[,1],m[,2],m[,3]))
+
+plot(m[,5],t="l")
+bias = mean(m[,5][1:150])
+bias
+
+s=100:1000
+plot(m[s,5]-bias,t="l")
+
+# 70 mdps / LSB
+
+sum(m[s,5]) * 70 * (5/1000)
+
+sum(m[s,5]) * 0.0027777778
+
+
 
 plot( mag(m[,1],m[,2],m[,3]) , t="l",ylim=c(0,4000))
 
@@ -64,7 +95,6 @@ filt = function(acclx,accly, acclz, gyrox,gyroy, gyroz) {
   
 }
 
-mag = function(a,b,c) sqrt(a*a + b*b + c*c)
 2000 deg per unit
 
 deg_to_rad = (2*Math.PI/360)
