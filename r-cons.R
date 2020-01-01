@@ -22,6 +22,70 @@ for(i in 1:222) {
 
 time1 = system.time( m <- plyr::ldply(lapply(1:1500 , function(i) { read.table(textConnection(udp_message() ))  } )  )  )
 
+#### filter signals ####
+filt = function(x) filter(LP,x)
+
+LP = butter(3,0.09,"low")
+LP = cheby1(3,0.1,0.01,"low")
+#LP <- ellip(3, 4, 19, 0.1)
+
+n=150
+
+LP <- fir1(290, 0.01)
+#LP = blackman(n)
+
+s1=which(LP==max(LP))[1]
+s1
+LP = LP[s1:length(LP)]
+
+#LP=rev(LP)
+LP = LP/sum(LP)
+class(LP)<-"Ma"
+
+
+
+
+filt = function(x) { x = fftfilt(LP,x);x[1:length(LP)]=x[length(LP)+1]; x;}
+
+
+s = c(rep(0,100),rep(1,100))
+plot( filt(s),t="l")
+lines(s,col="blue")
+
+
+#### plots ####
+x=m[,1]
+y=m[,2]
+z=m[,3]
+
+fx=filt(x);fy=filt(y);fz=filt(z)
+
+ax = atan2(sqrt(y^2+z^2),x);
+ay = atan2(sqrt(z^2+x^2),y);
+az = atan2(sqrt(x^2+y^2),z);
+
+fax = atan2(sqrt(fy^2+fz^2),fx);
+fay = atan2(sqrt(fz^2+fx^2),fy);
+faz = atan2(sqrt(fx^2+fy^2),fz);
+
+
+
+plot(fax*360/3.14,t="l")
+lines(ax*360/3.14,t="l",col="gray")
+
+#plot(fay*360/3.14,t="l")
+#plot(faz*360/3.14,t="l")
+#lines(az*360/3.14,t="l",col="gray")
+
+
+##### a3 #####
+library(signal)
+s =filt(diff(ay))
+
+plot(s,t="l")
+plot(s,t="l")
+
+plot(ay[1:500],t="l")
 
 
 #cal = apply(m,2,mean)

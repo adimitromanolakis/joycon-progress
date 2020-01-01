@@ -41,24 +41,24 @@
 
 const char *bus_str(int bus);
 
+int debug_responses = 1;
+#define DD if(debug_responses) 
+
+void print_buf(unsigned char *buf, int len) {
+		int i;
+		printf("         ", len); for (i = 0; i < len; i++) printf("%2d ", (int) i);
+		printf("\n");
+
+		printf("(n=%3d): ", len); for (i = 0; i < len; i++) printf("%2x ", (int) buf[i]);
+		printf("\n\n");
+
+}
+
 void hex_dump(unsigned char *buf, int len)
 {
     for (int i = 0; i < len; i++)
         printf("%02x ", buf[i]);
     printf("\n");
-}
-
-int hidraw_send_buf(int fd, unsigned char *buf, int n)
-{
-	int res = write(fd, buf, sizeof(n) );
-//	res = ioctl(fd, HIDIOCSFEATURE( sizeof(report1)  ), buf);
-
-	if (res < 0) {
-		printf("Error in writing report: %d\n", errno);
-		perror("write");
-	}
-
-	return res;
 }
 
 
@@ -76,44 +76,42 @@ int read_response(int fd, unsigned char *buf)
 		perror("read_response: Error in read ");
 		return 0;
 	} 
-
-	return res;
-
-	printf("read_response: (n=%3d):\t", res);
-
-	for (i = 0; i < res; i++)
-		printf("%02x ", (int)buf[i]);
-	printf("\n");
-
+	DD print_buf(buf,res);
 
 	return res;
 }
 
 
-int hidraw_exchange(int fd, int step, unsigned char *buf, int n, unsigned char *response)
+int hidraw_write(int fd, unsigned char *buf, int n)
 {
-    printf("SEND: ");  hex_dump(buf,  n ); 
 	int res = write(fd, buf, n );
 
 	if (res < 0) {
 		printf("Error in writing report: %d\n", errno);
 		perror("write");
-		return res;
+	
 	}
+	return res;
+}	
+/*
+int hidraw_exchange(int fd, int step, unsigned char *buf, int n, unsigned char *response)
+{
+	DD printf("---- hid_send_command ---\n");
+	DD print_buf(buf, n);
+
+
 
 	if(response == NULL) {
 		return 0;
 	}
 
 	int nresponse = read_response(fd, response);
-
 	return nresponse;
 }
+*/
 
-
-int hidraw_exchange_and_wait(int fd, int step, unsigned char *buf, int n, unsigned char *response)
+int hidraw_exchange_usb(int fd, unsigned char *buf, int n, unsigned char *response)
 {
-    //printf("SEND: ");  hex_dump(buf,  n ); 
 
 	printf("*** exchange and wait: %x %x\n",buf[0],buf[1]);
 	int res = write(fd, buf, n );
@@ -130,16 +128,17 @@ int hidraw_exchange_and_wait(int fd, int step, unsigned char *buf, int n, unsign
 
 	int nresponse;
 	int tries = 0;
-	nresponse = hidraw_exchange(fd, step, buf, n, response);
+	nresponse = read_response(fd, response);//(fd, step, buf, n, response);
 
 	while(1) {
-		//printf("Wait for command n=%d \n",res); hex_dump(buf,20);
+		printf("Wait for command n=%d \n",res); //hex_dump(buf,20);
 
 		if(response[0] == 0x81 && response[1] == buf[1]) break;
 		nresponse = read_response(fd, response);
 
 		if(tries>10) {
-				nresponse = hidraw_exchange(fd, step, buf, n, response);
+				hidraw_write(fd,buf,n);
+				nresponse = read_response(fd,response);
 				tries = 0;
 		}
 		tries ++ ;
@@ -170,9 +169,7 @@ int joycon_send_command(int fd, int command, uint8_t *data, int len, uint8_t *re
     if(data != NULL && len != 0)
         memcpy(buf + (bluetooth ? 0x1 : 0x9), data, len);
     
-    int nread = hidraw_exchange(fd, 10, buf, len + (bluetooth ? 0x1 : 0x9), response);
-
-	//printf("Command %d: response len = %d\n", (int)data[0], nread);
+    int nread = hidraw_exchange_usb(fd, buf, len + (bluetooth ? 0x1 : 0x9), response);
 
 	return nread;
 }
@@ -183,6 +180,9 @@ int joycon_send_subcommand(int fd, int command, int subcommand, uint8_t *data, i
 {
     unsigned char buf[0x400];
     memset(buf, 0, 0x400);
+
+	printf("\n\nSubcommand: %3x %3x len=%d", command,  subcommand,len);
+
     
     uint8_t rumble_base[9] = {(++global_count) & 0xF, 0x00, 0x01, 0x40, 0x40, 0x00, 0x01, 0x40, 0x40};
     memcpy(buf, rumble_base, 9);
@@ -195,6 +195,18 @@ int joycon_send_subcommand(int fd, int command, int subcommand, uint8_t *data, i
 
 	return nread;
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -375,8 +387,8 @@ int main(int argc, char **argv)
 	char command_0[] = { 0x80, 0x1 };
 
 again:
-printf("\n---- INIT ----\n");
-	hidraw_exchange_and_wait(fd, 1, command_0, sizeof(command_0), response_buf);
+	printf("\n---- INIT ----\n");
+	hidraw_exchange_usb(fd, command_0, sizeof(command_0), response_buf);
 
 	//char report1[] = { 0xA1,0xA2, 0xA3, 0xA4, 0x19, 0x01, 0x03, 0x07, 0x00, 0xA5, 0x02, 0x01, 0x7E, 0x0	hidraw_exchange(fd, 1, command_read_status, sizeof(command_read_status), buf);
 
@@ -387,34 +399,28 @@ printf("\n---- INIT ----\n");
 	usleep(20000);
 
 	char report2[] = { 0x80, 0x2 };
-
-	hidraw_exchange_and_wait(fd, 2, report2, sizeof(report2), response_buf);
+	hidraw_exchange_usb(fd,  report2, sizeof(report2), response_buf);
 
 	/* while(buf[0] != 0x81) {
 		res = read(fd, buf, 64);
 		printf("Retry n=%d \n",res); hex_dump(buf,20);
 		tries++;
-		if(tries > 2) { hidraw_exchange(fd, 2, report2, sizeof(report2), buf);  tries = 0; } 
+		if(tries > 2) { hidraw_exchange_usb(fd, 2, report2, sizeof(report2), buf);  tries = 0; } 
 	}*/
 	
 	
 	usleep(20000);
 
 	char report3[] = { 0x80, 0x3 };
-	hidraw_exchange_and_wait(fd, 3, report3, sizeof(report3), response_buf);
-//	usleep(20000);
+	hidraw_exchange_usb(fd,  report3, sizeof(report3), response_buf);
 
 	char report4[] = { 0x80, 0x2 };
-	hidraw_exchange_and_wait(fd, 4, report4, sizeof(report4), response_buf);
-//	usleep(20000);
+	hidraw_exchange_usb(fd,  report4, sizeof(report4), response_buf);
 
 	char command_enable_hid[] = { 0x80, 0x4 };
-	hidraw_exchange(fd, 5, command_enable_hid, sizeof(command_enable_hid), response_buf);
+	hidraw_exchange_usb(fd,  command_enable_hid, sizeof(command_enable_hid), NULL);
 
 	usleep(25000);
-
-
-
 
 	uint8_t sn_buffer[128];
 
@@ -431,19 +437,16 @@ printf("\n---- INIT ----\n");
 
 	global_count = 10;
 
-    buf[0] = 0x0f; // Lights
+    buf[0] = 0x01; // Lights
     joycon_send_subcommand(fd, 0x1, 0x30, buf, 1, response_buf);
-	wait_for(0,0x81);
 
-	
-
-
-//    buf[0] = 0; // Factory mode
+	//   buf[0] = 0; // Factory mode
     //joycon_send_subcommand(fd, 0x1, 0x8, buf, 1, response_buf);
 	//wait_for(0,0x81);
 
-if(0) {	
-	{ char cmd_home_light[30] = { 0x21,0x12, /*minicycle */0xf0,0x97, 0x97     }; joycon_send_subcommand(fd, 0x1, 0x38, cmd_home_light, 5, response_buf );  }
+if(1) {	
+	{ char cmd_home_light[30] = { 0x21,0x12, /*minicycle */0xf0,0x97, 0x97     }; 
+	joycon_send_subcommand(fd, 0x1, 0x38, cmd_home_light, 5, response_buf );  }
 	//usleep(20000);
 	wait_for(0,0x81);
 }
@@ -457,7 +460,7 @@ if(0) {
     // Enable IMU data
     buf[0] = 0x01; // 
     joycon_send_subcommand(fd, 0x1, 0x40, buf, 1, response_buf);
-	wait_for(0,0x81);
+	//wait_for(0,0x81);
 
     //buf[0] = 0x030; // 
    // joycon_send_subcommand(fd, 0x1, 0x3, buf, 1, response_buf);
@@ -472,10 +475,10 @@ if(0) {
 	// Get information for joy cons
     buf[0] = 0x01; // 
     joycon_send_subcommand(fd, 0x1, 0x2, buf, 0, response_buf);
-	wait_for(0,0x81);
+	//wait_for(0,0x81);
 
     joycon_send_subcommand(fd, 0x1, 0x50, buf, 0, response_buf);
-	wait_for(0,0x81);
+	//wait_for(0,0x81);
 
 	printf("GET DATA:"); hex_dump(response_buf,64);
 
@@ -488,7 +491,7 @@ if(0) {
 
 	buf[0] = 0x30;
     joycon_send_subcommand(fd, 0x1, 0x3, buf, 1, NULL);
-	wait_for(0,0x81);
+	//wait_for(0,0x81);
 
 
 	int n;
@@ -556,6 +559,8 @@ read_again:
 		//if (res < 0) {
 			//perror("read");
 		//} 
+
+		print_buf(buf,res);
 
 		double t = clock_measure()*1000;
 		clock_start();

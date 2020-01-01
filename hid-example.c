@@ -49,6 +49,7 @@ extern void udp_send(char *message);
 const char *bus_str(int bus);
 
 int debug_responses = 1;
+#define DD if(debug_responses) 
 
 
 void hid_list() 
@@ -75,10 +76,7 @@ void hid_list()
 			struct hidraw_devinfo info;
 			res = ioctl(fd, HIDIOCGRAWINFO, &info);
 
-
-
-			printf("dev: %s  id %04hx:%04hx  name %s\n", fname, (unsigned int)info.vendor, (unsigned int)info.product, buf);
-
+			fprintf(stderr, "dev: %s  id %04hx:%04hx  name %s\n", fname, (unsigned int)info.vendor, (unsigned int)info.product, buf);
 		}
 }
 
@@ -133,7 +131,9 @@ void print_buf(unsigned char *buf, int len) {
 
 unsigned char response[128];
 
-#define DD if(debug_responses) 
+
+
+
 
 void hid_send_command(int cmd, unsigned char *data, int len) {
 
@@ -145,14 +145,11 @@ void hid_send_command(int cmd, unsigned char *data, int len) {
 	
 	int i;
 	for(i=0;i<8;i++) buf[ 2 + i ] = rumble_data[i];
-
-	for(i=0;i< len ;i++) buf[ 2+8 + i] = data[i];
-
+	for(i=0;i< len ;i++) buf[ 2 + 8 + i] = data[i];
 
 	write(fd, buf, 2+8 + len);
 	DD printf("---- hid_send_command ---\n");
 	DD print_buf(data,len);
-
 
 	while(1) {
 		int res = read(fd, response, 64);
@@ -191,17 +188,31 @@ unsigned char * read_spi(int addr, int len)
 	char cmd1[10] = { 0x10,0x05,0x20,0,0,len};
 	int *pnt = (int*) & cmd1[1];
 	*pnt = addr;
-
+//print_buf(cmd1,6);
+	
 	hid_send_command(0x1, cmd1, 6 );
 	return &response[20];
 }
+
+
+unsigned char * write_spi(int addr, int len, char *data)
+{
+	char cmd1[100] = { 0x11,0x05,0x20,0,0,len};
+	int *pnt = (int*) & cmd1[1];
+	*pnt = addr;
+	for(int i=0;i<len;i++) cmd1[6+i] = data[i];
+	print_buf(cmd1,6+len);
+
+	hid_send_command(0x1, cmd1, 6 + len );
+	return &response[20];
+}
+
 
 
 void spi_dump(int addr, int len)
 {
 
 	debug_responses = 0;
-	hid_send_command_2(1,0x3,0x3f);
 
 	printf("        ");
 
@@ -246,6 +257,9 @@ int16_t read_int(unsigned char *p) {
 	return num;
 }
 
+
+// rate= 66.7 (n= 49):      -48     -6   4122      A    -12      8     -2    |      -50     -4   4122      A    -12      7     -1     |      -60     -4   4121      A    -11      7     -2   
+
 void read_calibration()
 {
 	int addr = 0x6000;
@@ -254,7 +268,7 @@ void read_calibration()
 	
 	unsigned char calib_data[256];
 
-	while(pos < 128) {
+	while(pos < 256) {
 		unsigned char * data;
 		data = read_spi(addr,16);
 		memcpy(calib_data + pos, data, 16);
@@ -268,11 +282,9 @@ void read_calibration()
 	unsigned char * pointer = &calib_data[0x20];
 
 	for(int i=0;i<12;i++) {
-
 		printf("data %d:  %2x %2x  int=%d\n", i, (int)pointer[0], (int)pointer[1], (int)read_int(pointer)  );
 		pointer += 2;
 	}
-
 }
 
 
@@ -359,6 +371,13 @@ double clock_measure() {
 		 return time;
 }
 
+extern void uinput_move(int dx, int dy);
+extern void uinput_setup();
+extern void uinput_update(int g0,int g1,int g2, int a0, int a1, int a2);
+extern void uinput_button_press(int num, int state);
+extern void uinput_stick( int stick_horizontal, int stick_vertical);
+
+int joycon_type; // 1 Left 2 Right
 
 int main(int argc, char **argv)
 {
@@ -367,6 +386,13 @@ int main(int argc, char **argv)
 
 	float scale_factor = 45;
 	if(getenv("SCALE")) scale_factor = atof(getenv("SCALE"));
+
+	int report_type = 1;
+
+	if(argc>2) {
+		report_type = atoi(argv[2]);
+		printf("report_type=%d\n",report_type);
+	}
 
 	hid_list();
 
@@ -467,7 +493,7 @@ hid_send_command_2( 1, 0x40, 0x1);
 hid_send_command_2( 1, 0x3, 0x30);
 hid_send_command_1( 1, 0x20);
 
-	char cmd_gyro[10] = { 0x41, 3,0,0,0 };
+	char cmd_gyro[10] = { 0x41, 2,0,0,0 };
 
 	hid_send_command(0x1, cmd_gyro, 5 );
 
@@ -479,12 +505,42 @@ hid_send_command_1( 1, 0x20);
 		printf("BAT VOLT=%.4f PERCENT=%2.1f\n", voltage,  100*(voltage-3.1)/(4.1-3.1) ) ;
 	}
 
-	spi_dump(0x2000, 256);
-	
+	printf("Joycond get info:\n");
+	hid_send_command_1( 1, 0x02);
 
+	{
+		uint8_t *p = &response[15];
+		printf("Fversion = %d.%d  Left=%d \n", (int)p[0],(int)p[1], (int)p[2]   );
+		joycon_type = p[2];
+	}
+
+
+
+if(0) { // DUMP SPI FLASH
+	hid_send_command_2(1,0x3,0x3f);
+	spi_dump(0x2000, 128);
+
+	spi_dump(0x3000, 128);
+	spi_dump(0x4000, 128);
+
+	spi_dump(0x8000,128);
+	char bb[10] = {0x44,0x55,1,2,3,4,5,6,7,8};
+	write_spi(0x8026,1,bb);
+	print_buf(response,64);
+	spi_dump(0x8000,128);
 	spi_dump(0x6000, 256);
+	spi_dump(0x6e00, 256);
+
 	read_calibration();
+	hid_send_command_2( 1, 0x3, 0x30);
+	hid_send_command_2( 1, 0x1, 0x3);
+
+	print_buf(response,64);
 	exit(1);
+
+}
+
+	//exit(1);
 
 
 
@@ -499,13 +555,15 @@ hid_send_command_1( 1, 0x20);
 	double time_sum;
 
 
-	int report_type = 1;
-
-	if(getenv("REPORT")) { int r = atoi(getenv("REPORT")); report_type = r; }
 
 
+uinput_setup();
 
 	/* Get a report from the device */
+
+	int last_packet_time = -9999;
+	int packets_missed = 0;
+
 	while(1) {
 
 
@@ -516,9 +574,23 @@ hid_send_command_1( 1, 0x20);
 
 		} 
 
+		//  uinput_move(5,5);
+
+
 		// if(buf[0] == 0x31) continue;
 
 		int time = (int)buf[1];
+		
+		if( last_packet_time > -9999) {
+			int diff = time - last_packet_time;
+			if(diff < 0) diff += 255;
+			printf("%d\n",diff);
+			if(diff != 3) packets_missed++;
+		}
+
+		last_packet_time = time;
+
+		printf("Missed %6d ",packets_missed);
 
 		double time_spent;
 		time_spent = clock_measure();
@@ -531,18 +603,20 @@ hid_send_command_1( 1, 0x20);
 
 		printf("rate=%5.1f (n=%3d): ", 1/ (time_sum/time_sum_n), res);
 
+		if(time_sum_n > 5) { time_sum_n = 0; time_sum = 0; }
+
 		//printf(" %03d ", time-prev_time);
 		prev_time = time;
 
 
-		if(report_type & 1) for (i = 0; i < res; i++)
-			printf("%02hhx ", buf[i]);
+		if(report_type & 1) for (i = 0; i < res; i++) printf("%02hhx ", buf[i]);
 		printf("  ");
 
 
 		// Parse joy con hid packet 
 
 		short int G0,G1,G2,A0,A1,A2;
+
 		int start = 13;
 		short int *p = (short int *) (&buf[start]);
 
@@ -570,38 +644,94 @@ hid_send_command_1( 1, 0x20);
 
 		}
 
+		int left = joycon_type == 1;
 
 		if(report_type & 4) {
+
 			int z=0;
 			char str1[256], str2[256], str3[256];
 
 			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
 			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
 
-			printf("%6d %6d %6d     ", (int)G0,(int)G1,(int) G2);
-			printf(" A %6d %6d %6d  ", (int)A0,(int)A1,(int) A2);
+			A0 = A0 +29; A1 = A1 -13; A2 = A2 + 1;
+
+			printf("G %6d %6d %6d     ", (int)G0,(int)G1,(int) G2); printf(" A %6d %6d %6d  ", (int)A0,(int)A1,(int) A2);
 
 			sprintf(str1 , "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
 
 			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
 			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
 
-			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2);
-			printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
+			uinput_update(G0,G1,G2, left?A0:(A0),left?A1:(-A1),left?A2:(-A2));
+ 			
+			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2); printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
 			sprintf(str2, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
 
 			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
 			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
-
-			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2);
-			printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
+ 		
+			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2); printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
 
 			sprintf(str3, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
+
 
 			udp_send(str3);
 			udp_send(str2);
 			udp_send(str1);
+
+			//click
 		}
+
+
+	if(report_type & 8) {
+
+			int z=0;
+			char udp_string[3][256];
+			int G0[3],G1[3],G2[3];
+			int A0[3],A1[3],A2[3];
+
+			for(int i=0;i<3;i++) {
+				G0[i] = p[z++]; G1[i] = p[z++]; G2[i] = p[z++];
+				A0[i] = p[z++]; A1[i] = p[z++]; A2[i] = p[z++];
+				
+				A0[i] = A0[i] +29; A1[i] = A1[i] -13; A2[i] = A2[i] + 1;
+
+				//uinput_update(G0,G1,G2, left?A0[i]:(A0[i]),left?A1[i]:(-A1[i]),left?A2[i]:(-A2[i]));
+				//printf("G %6d %6d %6d     ", (int)G0[i],(int)G1[i],(int) G2[i]); 
+				//printf(" A %6d %6d %6d  ",   (int)A0[i],(int)A1[i],(int) A2[i]);
+
+				sprintf(udp_string[i], "%6d %6d %6d  %6d %6d %6d\n", 
+				(int)G0[i],(int)G1[i],(int) G2[i],
+				(int)A0[i],(int)A1[i],(int) A2[i] );
+			}
+
+				int sumA0 = (A0[0]+A0[1]+A0[2])/3;
+				int sumA1 = (A1[0]+A1[1]+A1[2])/3;
+				int sumA2 = (A2[0]+A2[1]+A2[2])/3;
+				
+
+			uinput_update(G0,G1,G2, left?sumA0:(sumA0),left?sumA1:(-sumA1),left?sumA2:(-sumA2));
+
+			udp_send(udp_string[2]);
+			udp_send(udp_string[1]);
+			udp_send(udp_string[0]);
+
+			int pos = left==1?5:3;
+			
+			uinput_button_press(1, buf[pos]);
+
+			uint8_t *data = buf + (left ? 6 : 9);
+			uint16_t stick_horizontal = data[0] | ((data[1] & 0xF) << 8);
+			uint16_t stick_vertical = (data[1] >> 4) | (data[2] << 4);
+
+			int sx = ( (int)stick_horizontal ) - 1926;
+			int sy = ( (int)stick_vertical ) - 2174;
+
+			uinput_stick( sx,sy );
+			//printf("STICK %d %d\n", (int)sx, (int)sy);
+		}
+
 
 		printf("\n");
 	}
