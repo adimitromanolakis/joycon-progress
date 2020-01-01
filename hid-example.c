@@ -260,12 +260,49 @@ int16_t read_int(unsigned char *p) {
 
 // rate= 66.7 (n= 49):      -48     -6   4122      A    -12      8     -2    |      -50     -4   4122      A    -12      7     -1     |      -60     -4   4121      A    -11      7     -2   
 
+struct stick_calib {
+	int16_t center_x;
+	int16_t center_y;
+	int16_t x_min;
+	int16_t x_max;
+	int16_t y_min;
+	int16_t y_max;
+};
+
+struct stick_calib calib_left, calib_right;
+
+
+void stick_calib_init(struct stick_calib *s, unsigned char *stick_cal) {
+		uint16_t data[6];
+
+		data[0] = (stick_cal[1] << 8) & 0xF00 | stick_cal[0];
+		data[1] = (stick_cal[2] << 4) | (stick_cal[1] >> 4);
+		data[2] = (stick_cal[4] << 8) & 0xF00 | stick_cal[3];
+		data[3] = (stick_cal[5] << 4) | (stick_cal[4] >> 4);
+		data[4] = (stick_cal[7] << 8) & 0xF00 | stick_cal[6];
+		data[5] = (stick_cal[8] << 4) | (stick_cal[7] >> 4);
+
+	 	s->center_x = data[0];
+	 	s->center_y = data[1];
+	 	s->x_min =  s->center_x - data[2];
+	 	s->x_max =  s->center_x + data[4];
+	    s->y_min =  s->center_y - data[3];
+		s->y_max =  s->center_y + data[5];
+
+		printf("center: %d %d  min=%d %d max=%d %d %x %x\n",
+			(int)s->center_x,(int)s->center_y,
+			(int)s->x_min,(int)s->y_min,
+			(int)s->x_max,(int)s->y_max,
+			(int)s->center_x,(int)s->center_y
+		);
+}
+
 void read_calibration()
 {
 	int addr = 0x6000;
 
 	int pos = 0;
-	
+#if 0	
 	unsigned char calib_data[256];
 
 	while(pos < 256) {
@@ -278,13 +315,12 @@ void read_calibration()
 
 	for(int i=0;i<128;i++)  printf("%02x ", calib_data[i]);	
 	printf("\n");
+#endif
+	unsigned char *data = read_spi(0x603d,16);
+	stick_calib_init(&calib_left, (uint16_t*)&data[0]);
 
-	unsigned char * pointer = &calib_data[0x20];
-
-	for(int i=0;i<12;i++) {
-		printf("data %d:  %2x %2x  int=%d\n", i, (int)pointer[0], (int)pointer[1], (int)read_int(pointer)  );
-		pointer += 2;
-	}
+	data = read_spi(0x6046,16);
+	stick_calib_init(&calib_right, (uint16_t*)&data[0]);
 }
 
 
@@ -516,12 +552,17 @@ hid_send_command_1( 1, 0x20);
 
 
 
-if(0) { // DUMP SPI FLASH
+if(report_type & 32) { // DUMP SPI FLASH
 	hid_send_command_2(1,0x3,0x3f);
 	spi_dump(0x2000, 128);
 
 	spi_dump(0x3000, 128);
 	spi_dump(0x4000, 128);
+	spi_dump(0x6000, 128);
+	read_calibration();
+
+	exit(1);
+	
 
 	spi_dump(0x8000,128);
 	char bb[10] = {0x44,0x55,1,2,3,4,5,6,7,8};
@@ -557,7 +598,9 @@ if(0) { // DUMP SPI FLASH
 
 
 
-uinput_setup();
+	uinput_setup();
+	read_calibration();
+
 
 	/* Get a report from the device */
 
@@ -725,11 +768,19 @@ uinput_setup();
 			uint16_t stick_horizontal = data[0] | ((data[1] & 0xF) << 8);
 			uint16_t stick_vertical = (data[1] >> 4) | (data[2] << 4);
 
-			int sx = ( (int)stick_horizontal ) - 1926;
-			int sy = ( (int)stick_vertical ) - 2174;
+			int sx = ( (int)stick_horizontal ) ;//- 1926;
+			int sy = ( (int)stick_vertical ) ;//- 2174;
+
+			if(left) {
+				sx -= calib_left.center_x;
+				sy -= calib_left.center_y;
+			} else {
+				sx -= calib_right.center_x;
+				sy -= calib_right.center_y;
+			}
 
 			uinput_stick( sx,sy );
-			//printf("STICK %d %d\n", (int)sx, (int)sy);
+			//printf("LEFT=%d STICK %d %d\n", left, (int)sx, (int)sy);
 		}
 
 

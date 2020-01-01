@@ -25,7 +25,6 @@ int pG0=0, pG1=0, pG2=0;
 void uinput_update(int G0,int G1,int G2, int A0, int A1, int A2) 
 {
    uinput_update_1(G0,G1,G2,A0,A1,A2);
-
 }
 
 
@@ -35,9 +34,7 @@ void uinput_update_0(int G0,int G1,int G2, int A0, int A1, int A2)
    if(after_button_delay > 0) {
       after_button_delay --;
       return;
-
    }
-
 
    //accell difference
    int D0 = G0-pG0;
@@ -72,11 +69,7 @@ inline float clamp(float value, float min, float max) {
 
 void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
 {
-
-    
-//A0=-A1;A1=-A1;A2=-A2;
-
-
+   //A0=-A1;A1=-A1;A2=-A2;
       float moveX;
       moveX = - (float)A2/150;
       moveX += (float)A0/190 ;
@@ -168,10 +161,10 @@ int button_state[10] = {0,0,0,0,0,0 };
 void button_logic(int num, int state, int event) {
    if(button_state[num] != state) {
 
-printf("EMIT %d state=%d", event,state);
+      //printf("EMIT %d state=%d", event,state);
 
       emit(uinput_fd, EV_KEY, event, state);
-   emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
+      emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
 
       if(state==1) after_button_delay = 45/3;
 
@@ -181,7 +174,7 @@ printf("EMIT %d state=%d", event,state);
 
 void uinput_button_press(int num, int state)
 {
-   printf(" BUT=%x ", state);
+   //printf(" BUT=%x ", state);
    int btn_left = state>>6;
    button_logic(1,(state>>7)&1 | (state>>6)&1  | (state>>0)&1,BTN_LEFT);
    button_logic(2,(state>>3)&1,BTN_RIGHT);
@@ -197,12 +190,12 @@ int rpt_down = 0, rpt_up = 0;
 
 void scroll_up(int stick_vertical)
 {
-   if(stick_vertical < -500) {
+   if(stick_vertical < -300) {
     emit(uinput_fd, EV_REL, REL_WHEEL, -1);
    if(stick_vertical < -900)     emit(uinput_fd, EV_REL, REL_WHEEL,  -2);
    } 
 
-   if(stick_vertical > 500) {
+   if(stick_vertical > 300) {
     emit(uinput_fd, EV_REL, REL_WHEEL,  1);
     if(stick_vertical > 900)     emit(uinput_fd, EV_REL, REL_WHEEL,  2);
    }
