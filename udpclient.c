@@ -50,7 +50,5 @@ void udp_send(char *message) {
         buffer[n] = '\0'; 
         printf("Server : %s\n", buffer); 
     }
-
-    return 0; 
 } 
 

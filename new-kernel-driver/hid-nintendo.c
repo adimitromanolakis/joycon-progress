@@ -660,7 +660,7 @@ static int joycon_enable_rumble(struct joycon_ctlr *ctlr, bool enable)
 	req->subcmd_id = 0x40;
 	req->data[0] = 1;
 
-	ret2 =  joycon_send_subcmd(ctlr, req, 1, HZ/4);
+	ret2 = joycon_send_subcmd(ctlr, req, 1, HZ/4);
 
 	// Reset NFC
 
@@ -668,9 +668,7 @@ static int joycon_enable_rumble(struct joycon_ctlr *ctlr, bool enable)
 	req->subcmd_id = 0x20;
 	req->data[0] = 1;
 
-	ret2 =  joycon_send_subcmd(ctlr, req, 0, HZ/4);
-
-
+	ret2 = joycon_send_subcmd(ctlr, req, 0, HZ/4);
 
 	// Enable report 0x30
 
@@ -678,15 +676,15 @@ static int joycon_enable_rumble(struct joycon_ctlr *ctlr, bool enable)
 	req->subcmd_id = 0x3;
 	req->data[0] = 0x30;
 
-	ret2 =  joycon_send_subcmd(ctlr, req, 0, HZ/4);
+	ret2 = joycon_send_subcmd(ctlr, req, 0, HZ/4);
 
 
-	// send 0x80 0 command
+	// send 0x80 1 command
 	req = (struct joycon_subcmd_request *)buffer;
 	req->subcmd_id = 0x8;
-	req->data[0] = 0x0;
+	req->data[0] = 0x1;
 
-	ret2 =  joycon_send_subcmd(ctlr, req, 0, HZ/4);
+	ret2 = joycon_send_subcmd(ctlr, req, 0, HZ/4);
 
 
 	return ret2;
@@ -1401,8 +1399,7 @@ static int joycon_ctlr_handle_event(struct joycon_ctlr *ctlr, u8 *data,
 				break;
 			report = (struct joycon_input_report *)data;
 
-			printk("Received a report of type %x while waiting for byte %x\n", report->reply.id, 
-				ctlr->subcmd_ack_match);
+			printk("Received a report of type %x while waiting for byte %x\n", report->reply.id, ctlr->subcmd_ack_match);
 
 			if (report->reply.id == ctlr->subcmd_ack_match)
 				match = true;
