@@ -1,0 +1,9 @@
+
+
+ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2007|2008|2009", TAG+="uaccess", GROUP="plugdev", RUN+="/usr/bin/report RULE1 %p"
+
+#SUBSYSTEM=="hidraw", MODE="0666", RUN+="/usr/bin/report RULE2 %p"
+SUBSYSTEM=="hidraw", DEVPATH=="*/hci*057E:200*", MODE="0666", RUN+="/usr/bin/report RULE3 %p"
+
+
+
