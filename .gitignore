@@ -1,0 +1,11 @@
+.Rproj
+.Rproj.user
+.vscode
+new-kernel-driver/*cmd
+new-kernel-driver/*ko
+.Rhistory
+.RData
+a.out
+hidraw
+
+

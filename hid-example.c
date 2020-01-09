@@ -33,6 +33,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
+
 
 /* C */
 #include <stdio.h>
@@ -289,7 +291,7 @@ void stick_calib_init(struct stick_calib *s, int isleft, unsigned char *stick_ca
   int d4 = ((stick_cal[4] << 8) & 0xf00 | stick_cal[3]); // X Center
   int d5 = ((stick_cal[5] << 4) | (stick_cal[4] >> 4));  // Y Center
 
-  printf("D=%d %d %d %d %d %d\n",d0,d1,d2,d3,d4,d5);
+  // printf("D=%d %d %d %d %d %d\n",d0,d1,d2,d3,d4,d5);
 
   if(isleft) {
 	  s->center_x = d4;
@@ -440,6 +442,16 @@ int main(int argc, char **argv)
 
 	float scale_factor = 45;
 	if(getenv("SCALE")) scale_factor = atof(getenv("SCALE"));
+	
+	if(getenv("FORK")) {
+
+		printf("FORK\n");
+		
+		int pid = fork();
+		if(pid!=0) exit(0);
+
+		signal(SIGHUP, SIG_IGN);
+	}
 
 	
 	if(argc>2) {
@@ -548,6 +560,8 @@ char link_key_cmd[20] = { 1,2,
 	exit(1);
 
 #endif
+
+
 	hid_send_command_2(1, 0x8, 0x1); // set_factory_mode 0
 
 	hid_send_command_2( 1, 0x40, 0x1);
@@ -583,7 +597,8 @@ char link_key_cmd[20] = { 1,2,
 
 		printf("Serial Number: %s\n",serial);
 	}
-
+ 
+	hid_send_command_2(1,0x30,1+4);
 
 	if(report_type & 32) { // DUMP SPI FLASH
 		hid_send_command_2(1,0x3,0x3f);

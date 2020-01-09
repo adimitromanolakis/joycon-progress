@@ -78,11 +78,18 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
 {
    //A0=-A1;A1=-A1;A2=-A2;
       float moveX;
-      moveX = - (float)A2/150;
-      moveX += (float)A0/190 ;
-      
+      //moveX = - (float)A2/150;
+     // moveX += (float)A0/190 ;
+
+      moveX = - (float)A2/130;
+      moveX += (float)A0/290 ;
+
+
+
       float moveY = (float)A1/80;
 
+      moveX *= 1.0;
+      moveY *= 1.0;
 
       float maxMove = 18*3;
       //float mult = 0.1;
@@ -104,8 +111,6 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
      oo  if(A2 > 320) moveX -= 0.3;
      oo   if(A2 < -320) moveX += 0.3   ;
 
-
-
       //if(A1 >   300) moveY +=1;
       //if(A1 <  -300) moveY -=1;
       
@@ -120,14 +125,14 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
      //if(moveX< -0.2) moveX-=0.7;
      
 
-     double exp = 0.99;
+     double exp = 1.2;
 
      if(moveX>0) {
         moveX = maxMove*pow(moveX/maxMove,exp);
      } else {
         moveX = -maxMove*pow(-moveX/maxMove,exp);
      }
-     exp=1;
+     //exp=1;
 
      if(moveY>0) {
         moveY = maxMove*pow(moveY/maxMove,exp);
@@ -175,7 +180,7 @@ void button_logic(int num, int state, int event) {
       emit(uinput_fd, EV_KEY, event, state);
       emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
 
-      if(state==1) after_button_delay = 45/3;
+      if(state==1) after_button_delay = 12;
 
       button_state[num] = state;
    }
@@ -183,10 +188,10 @@ void button_logic(int num, int state, int event) {
 
 void uinput_button_press(int num, int state)
 {
-   // printf(" BUT=%x\n", state);
+   //printf(" BUT=%x\n", state);
 
    button_logic(1, state & (0x40 | 0x80 | 0x2 | 0x20000 | 0x400000 | 0x800000 ), BTN_LEFT);
-   button_logic(2, state & ( 0x200 | 0x100 ) , BTN_RIGHT);
+   button_logic(2, state & ( 0x200 | 0x100 | 0x1 | 0x40000 ) , BTN_RIGHT);
 }
 
 int down_k = 0, up_k = 0;
@@ -194,16 +199,19 @@ int rpt_down = 0, rpt_up = 0;
 
 int stick_down_count = 0, stick_up_count = 0;;
 
-void scroll_up(int stick_vertical)
+
+
+
+void scroll_up(int scroll_value)
 {
-   if(stick_vertical < -200) {
+   if(scroll_value < 0) {
       int distance = -1;
 
-      if(stick_vertical < -900)  {
+      if(scroll_value == -2)  {
          stick_up_count++;
          //if(stick_up_count>3) distance -= 1;
          //if(stick_up_count>7) 
-         distance -= 3;
+         distance -= 2;
    
       } else stick_up_count = 0;
 
@@ -213,14 +221,14 @@ void scroll_up(int stick_vertical)
       emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
    } 
 
-   if(stick_vertical > 200) {
+   if(scroll_value > 0) {
       int distance = 1; 
 
-      if(stick_vertical > 900)  {
+      if(scroll_value == 2)  {
          stick_down_count++;
          //if(stick_down_count>3) distance += 1;
          //if(stick_down_count>7) 
-         distance += 3;
+         distance += 2;
    
       } else stick_down_count = 0;
 
@@ -229,32 +237,40 @@ void scroll_up(int stick_vertical)
       emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
 
       }
-       
-
 }
 
 
 void uinput_stick( int stick_horizontal, int stick_vertical)
 {
-   if(!silent) printf("STICK %d downk=%d rpt=%d   upk=%d rpt=%d counts=%d/%d ",stick_vertical, down_k,rpt_down, up_k, rpt_up ,
-   stick_down_count, stick_up_count);
-   
 
-   if(stick_vertical < -200) {
+   int scroll_value = 0;
+   int rpt_interval = 0;
+
+   if(stick_vertical < -200) { scroll_value = -1; rpt_interval = 5; }
+   if(stick_vertical < -900) { scroll_value = -2; rpt_interval = 5; }
+   if(stick_vertical > 200)  { scroll_value = 1; rpt_interval = 5; }
+   if(stick_vertical > 900)  { scroll_value = 2; rpt_interval = 5; }
+
+   if(!silent) 
+      printf("STICK %d downk=%d rpt=%d   upk=%d rpt=%d counts=%d/%d scroll_value=%d\n",stick_vertical, down_k,rpt_down, up_k, rpt_up ,
+   stick_down_count, stick_up_count,scroll_value);
+
+   
+   if(scroll_value < 0) {
       if(down_k==0) {
 
          if(!silent) printf("KEYDOWN ON ");
          //emit(uinput_fd, EV_KEY, KEY_DOWN, 1);
-         scroll_up(stick_vertical);
+         scroll_up(scroll_value);
 
          down_k = 1;
-         rpt_up = 5; 
+         if(scroll_value == -1) rpt_up = rpt_interval; 
       } else {
 
          rpt_up--;
          if(rpt_up<=0) { 
-            rpt_up = 5; 
-            scroll_up(stick_vertical);
+            rpt_up = rpt_interval; 
+            scroll_up(scroll_value);
          }
       }
 
@@ -266,20 +282,20 @@ void uinput_stick( int stick_horizontal, int stick_vertical)
       }
    }
 
-   if(stick_vertical > 200) {
+   if(scroll_value > 0) {
     
       if(up_k==0) {
          //emit(uinput_fd, EV_KEY, KEY_UP, 1);
-         scroll_up(stick_vertical);
+         if(scroll_value == 1) scroll_up(scroll_value);
 
          up_k = 1;
-         rpt_down = 5;
+         rpt_down = rpt_interval;
       } else {
 
          rpt_down--;
          if(rpt_down<=0) { 
-            rpt_down = 5; 
-            scroll_up(stick_vertical);
+            rpt_down = rpt_interval; 
+            scroll_up(scroll_value);
          }
 
       }
