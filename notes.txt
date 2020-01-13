@@ -1,4 +1,0 @@
-Charging grip ID:
-Bus 001 Device 012: ID 057e:200e Nintendo Co., Ltd 
-
-

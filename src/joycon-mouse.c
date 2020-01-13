@@ -7,34 +7,20 @@
 
 #include <stdint.h>
 
-#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
-#include  <time.h>
+#include <time.h>
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <dirent.h>
 
-#include <linux/types.h>
-#include <linux/input.h>
-#include <linux/hidraw.h>
+#include <sys/time.h>
 
-/*
- * Ugly hack to work around failing compilation on systems that don't
- * yet populate new version of hidraw.h to userspace.
- *
- * If you need this, please have your distro update the kernel headers.
- */
-#ifndef HIDIOCSFEATURE
-#define HIDIOCSFEATURE(len)    _IOC(_IOC_WRITE|_IOC_READ, 'H', 0x06, len)
-#define HIDIOCGFEATURE(len)    _IOC(_IOC_WRITE|_IOC_READ, 'H', 0x07, len)
-#endif
 
 
 //extern "C" {
@@ -45,46 +31,22 @@ extern void udp_send(char *message);
 const char *bus_str(int bus);
 
 int silent = 0;
-int debug_responses = 0;
+int debug_responses = 1;
 int report_type = 8;
 
 #define DD if(debug_responses) 
 
+extern void hid_list() ;
+extern void hid_send_command(int cmd, unsigned char *data, int len);
+extern int open_device(char *fname);
+extern int read_from_hid(char *buf, int len);
 
 
-void hid_list() 
-{
-       DIR * d = opendir("/dev");
+int fd;
 
-		struct dirent *f; 
-		
-		while( (f = readdir(d)) != NULL ) {
-			char buf[256];
-			
-			if(strncmp(f->d_name, "hidraw", 6) != 0) continue;
+unsigned char response[128];
 
-			char fname[256] = "/dev/";
-			strcat(fname,f->d_name);
-
-			int fd = open(fname, O_RDWR);
-
-			if(fd < 0) {
-
-				fprintf(stderr, "   %s   permission denied\n", fname);
-				continue;
-			}
-
-			/* Get Raw Name */
-			int res = ioctl(fd, HIDIOCGRAWNAME(256), buf);
-			if (res < 0)
-				perror("HIDIOCGRAWNAME");
-
-			struct hidraw_devinfo info;
-			res = ioctl(fd, HIDIOCGRAWINFO, &info);
-
-			fprintf(stderr, "   %s   id %04hx:%04hx  name %s\n", fname, (unsigned int)info.vendor, (unsigned int)info.product, buf);
-		}
-}
+extern void print_buf(unsigned char *buf, int len);
 
 
 
@@ -120,60 +82,6 @@ print_bar(int value)
 	printf("%s",str);
 }
 
-
-int fd;
-unsigned char rumble_data[8];
-int cmd_count = 1;
-
-
-
-void print_buf(unsigned char *buf, int len) {
-		int i;
-		printf("         "); for (i = 0; i < len; i++) printf("%2d ", (int) i);
-		printf("\n");
-
-		printf("(n=%3d): ", len); for (i = 0; i < len; i++) printf("%2x ", (int) buf[i]);
-		printf("\n\n");
-
-}
-
-unsigned char response[128];
-
-
-
-void hid_send_command(int cmd, unsigned char *data, int len) {
-
-	uint8_t buf[128];
-
-	buf[0] = cmd;
-	buf[1] = (cmd_count++) & 0xf;
-	
-	int i;
-	for(i=0;i<8;i++) buf[ 2 + i ] = rumble_data[i];
-	for(i=0;i< len ;i++) buf[ 2 + 8 + i] = data[i];
-
-	int result = write(fd, buf, 2+8 + len);
-	if(result<0) { perror("Error writing to device"); exit(0); }
-
-	DD printf("---- hid_send_command ---\n");
-	DD print_buf(data,len);
-
-	while(1) {
-		int res = read(fd, response, 64);
-		if (res < 0) {
-			perror("read");
-			exit(1);
-
-		} 
-
-		if(response[0]  != 0x21) continue;
-		if(response[14] != data[0]) continue;
-
-		DD if(len > 0) printf("Response to command %x:\n", data[0]);
-		DD print_buf(response,res);
-		break;
-	}
-}
 
 
 
@@ -349,77 +257,7 @@ void read_calibration()
 
 
 
-int open_device(char *fname)
-{
-	char buf[256];
-	int res, desc_size, i;
 
-	struct hidraw_report_descriptor rpt_desc;
-	struct hidraw_devinfo info;
-
-	printf("\nOpening device: %s\n",fname);
-
-	fd = open(fname, O_RDWR);
-
-	if (fd < 0) {
-		perror("Unable to open device");
-		return 1;
-	}
-
-	memset(&rpt_desc, 0x0, sizeof(rpt_desc));
-	memset(&info, 0x0, sizeof(info));
-	memset(buf, 0x0, sizeof(buf));
-
-
-#ifdef PRINT_DEVICE_DESCRIPTOR
-	/* Get Report Descriptor Size */
-	res = ioctl(fd, HIDIOCGRDESCSIZE, &desc_size);
-	if (res < 0)
-		perror("HIDIOCGRDESCSIZE");
-	else
-		printf("Report Descriptor Size: %d\n", desc_size);
-
-	/* Get Report Descriptor */
-	rpt_desc.size = desc_size;
-	res = ioctl(fd, HIDIOCGRDESC, &rpt_desc);
-	if (res < 0) {
-		perror("HIDIOCGRDESC");
-	} else {
-		printf("Report Descriptor:\n");
-		for (i = 0; i < rpt_desc.size; i++)
-			printf("%hhx ", rpt_desc.value[i]);
-		puts("\n");
-	}
-#endif
-
-	/* Get Raw Name */
-	res = ioctl(fd, HIDIOCGRAWNAME(256), buf);
-	if (res < 0)
-		perror("HIDIOCGRAWNAME");
-	else
-		printf("    Name: %s\n", buf);
-
-	/* Get Physical Location */
-	res = ioctl(fd, HIDIOCGRAWPHYS(256), buf);
-	if (res < 0)
-		perror("HIDIOCGRAWPHYS");
-	else
-		printf("    Phys: %s\n", buf);
-
-	/* Get Raw Info */
-	res = ioctl(fd, HIDIOCGRAWINFO, &info);
-	if (res < 0) {
-		perror("HIDIOCGRAWINFO");
-	} else {
-		printf("    Info: ");
-		printf("bustype: %d (%s)", info.bustype, bus_str(info.bustype));
-		printf(" vendor: 0x%04hx", info.vendor);
-		printf(" product: 0x%04hx\n", info.product);
-	}
-
-	printf("\n\n");
-	fflush(stdout);
-}
 
 
 struct timeval  tv1, tv2;
@@ -485,12 +323,7 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	char fname[256];
-
-	sprintf(fname,"/dev/hidraw%s", argv[1]);
-
-	open_device(fname);
-
+	open_device(argv[1]);
 
 	//char buf9[20] = {01 ,  53, 00, 00, 00, 00, 00 ,00, 00, 00,    0x8, 00}; // erase pairing
 	//write(fd,buf9, 2+8 + 2);
@@ -678,8 +511,8 @@ char link_key_cmd[20] = { 1,2,
 
 	while(1) {
 
+		res = read_from_hid(buf, 64);
 
-		res = read(fd, buf, 64);
 		if (res < 0) {
 			perror("read");
 			exit(1);
@@ -849,28 +682,8 @@ char link_key_cmd[20] = { 1,2,
 
 		if(!silent) printf("\n");
 	}
+
+
 	close(fd);
 	return 0;
-}
-
-const char *
-bus_str(int bus)
-{
-	switch (bus) {
-	case BUS_USB:
-		return "USB";
-		break;
-	case BUS_HIL:
-		return "HIL";
-		break;
-	case BUS_BLUETOOTH:
-		return "Bluetooth";
-		break;
-	case BUS_VIRTUAL:
-		return "Virtual";
-		break;
-	default:
-		return "Other";
-		break;
-	}
 }
