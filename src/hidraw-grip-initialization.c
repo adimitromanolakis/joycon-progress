@@ -168,6 +168,11 @@ int joycon_send_command(int fd, int command, uint8_t *data, int len, uint8_t *re
     buf[bluetooth ? 0x0 : 0x8] = command;
     if(data != NULL && len != 0)
         memcpy(buf + (bluetooth ? 0x1 : 0x9), data, len);
+
+
+	printf("\nJOYCON SEND COMMAND:\n");
+	print_buf(buf, len + (bluetooth ? 0x1 : 0x9));
+
     
     int nread = hidraw_exchange_usb(fd, buf, len + (bluetooth ? 0x1 : 0x9), response);
 

@@ -12,10 +12,14 @@ API=hidraw
 ifeq ($(API),hidraw)
 
   DEVICE=src/device-hidraw.c
+  VIRTUAL_MOUSE=src/uinput-virtual-mouse.c
 
 else
 
   DEVICE=src/device-hidapi.c
+  VIRTUAL_MOUSE=src/virtual-mouse-windows.c
+  VIRTUAL_MOUSE=src/uinput-virtual-mouse.c
+
   OPT += -I/usr/local/include/hidapi/
   LIBS=-lhidapi-libusb
   LIBS=-lhidapi-hidraw
@@ -23,8 +27,9 @@ else
 endif
 
 
-SRC=src/joycon-mouse.c src/udpclient.c src/uinput-virtual-mouse.c
+SRC=src/joycon-mouse.c src/udpclient.c
 SRC+=$(DEVICE)
+SRC+=$(VIRTUAL_MOUSE)
 
 
 joycon: $(SRC)

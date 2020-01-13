@@ -101,7 +101,7 @@ void hid_list()
 }
 
 
-void hid_send_command(int cmd, unsigned char *data, int len) {
+uint8_t * hid_send_command(int cmd, unsigned char *data, int len) {
 
 	uint8_t buf[128];
 
@@ -131,6 +131,8 @@ void hid_send_command(int cmd, unsigned char *data, int len) {
 
 		DD if(len > 0) printf("Response to command %x:\n", data[0]);
 		DD print_buf(response,res);
+		
+		return &response[15];
 		break;
 	}
 }

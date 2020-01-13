@@ -31,15 +31,17 @@ extern void udp_send(char *message);
 const char *bus_str(int bus);
 
 int silent = 0;
-int debug_responses = 1;
+int debug_responses = 0;
 int report_type = 8;
 
 #define DD if(debug_responses) 
 
 extern void hid_list() ;
-extern void hid_send_command(int cmd, unsigned char *data, int len);
+extern uint8_t * hid_send_command(int cmd, unsigned char *data, int len);
 extern int open_device(char *fname);
 extern int read_from_hid(char *buf, int len);
+
+char *supported_device[256];
 
 
 int fd;
@@ -85,19 +87,20 @@ print_bar(int value)
 
 
 
-void hid_send_command_1(int cmd, unsigned char cmd_byte0) {
+uint8_t * hid_send_command_1(int cmd, unsigned char cmd_byte0) {
 	char buf[2];	
 	buf[0] = cmd_byte0;
-	hid_send_command(cmd,buf,1);
+	return hid_send_command(cmd,buf,1);
+
 }
 
 
 
-void hid_send_command_2(int cmd, unsigned char cmd_byte0, unsigned char cmd_byte1) {
+uint8_t * hid_send_command_2(int cmd, unsigned char cmd_byte0, unsigned char cmd_byte1) {
 	char buf[2];	
 	buf[0] = cmd_byte0;
 	buf[1] = cmd_byte1;
-	hid_send_command(cmd,buf,2);
+	return hid_send_command(cmd,buf,2);
 }
 
 
@@ -109,8 +112,9 @@ unsigned char * read_spi(int addr, int len)
 	*pnt = addr;
 //print_buf(cmd1,6);
 	
-	hid_send_command(0x1, cmd1, 6 );
-	return &response[20];
+	uint8_t * resp = hid_send_command(0x1, cmd1, 6 );
+	//return &response[20];
+	return &resp[5];	
 }
 
 
@@ -123,8 +127,10 @@ unsigned char * write_spi(int addr, int len, char *data)
 	for(int i=0;i<len;i++) cmd1[6+i] = data[i];
 	print_buf(cmd1,6+len);
 
-	hid_send_command(0x1, cmd1, 6 + len );
-	return &response[20];
+	uint8_t * resp = hid_send_command(0x1, cmd1, 6 + len );
+	//return &response[20];
+	return &resp[5];	
+
 }
 
 
@@ -418,22 +424,24 @@ char link_key_cmd[20] = { 1,2,
 
 	hid_send_command(0x1, cmd_gyro, 5 );
 
-	{ char cmd_home_light[10] = { 0x38, 0x21,0x13, /*minicycle */0xf0,0xff, 0xf7     }; hid_send_command(0x1, cmd_home_light, 6 );  }
+	{ 
+		char cmd_home_light[10] = { 0x38, 0x21,0x13, /*minicycle */0xf0,0xff, 0xf7     }; 
+		hid_send_command(0x1, cmd_home_light, 6 );  
+	}
 
-
+	uint8_t * r;
+	
 	//while(1) { read(fd,response,64); print_buf(response,50); if(response[0] == 0x21 && response[14]==0x41) break; }
 	{ 
-		hid_send_command_1(1, 0x50);
-		int b = 2.5 * ( (  (int)response[16] ) << 8 | ((int)response[15]) );
+		r = hid_send_command_1(1, 0x50);
+		int b = 2.5 * ( (  (int)r[1] ) << 8 | ((int)r[0]) );
 		float voltage = (float)b/1000;
 		fprintf(stderr, "Battery Voltage=%.4f PERCENT=%2.1f\n", voltage,  100*(voltage-3.2)/(4.1-3.2) ) ;
 	}
 
 
-
 	{
-		hid_send_command_1( 1, 0x02);
-		uint8_t *p = &response[15];
+		uint8_t *p = hid_send_command_1( 1, 0x02);
 		printf("Firmware version = %d.%d  Joycon type=%d \n", (int)p[0],(int)p[1], (int)p[2]   );
 		joycon_type = p[2];
 	}
@@ -452,6 +460,7 @@ char link_key_cmd[20] = { 1,2,
 		printf("Serial Number: %s\n",serial_number);
 	}
  
+	// Set the leds
 	hid_send_command_2(1,0x30,1+4);
 
 	if(report_type & 32) { // DUMP SPI FLASH
@@ -508,6 +517,9 @@ char link_key_cmd[20] = { 1,2,
 
 	uinput_setup(serial_number);
 
+//	res = read_from_hid(buf, 64);
+// 	res = read_from_hid(buf, 64);
+//	exit(1);
 
 	while(1) {
 
