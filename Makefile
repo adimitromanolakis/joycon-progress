@@ -1,10 +1,13 @@
+
+OPT=-O2 -ggdb
+
 default: hidraw-grip-initialization joycon
 
 
-hidraw-grip-initialization: hidraw-grip-initialization.c
-	gcc -O2 -o hidraw-grip-initialization hidraw-grip-initialization.c 
+hidraw-grip-initialization: src/hidraw-grip-initialization.c
+	gcc $(OPT) -o hidraw-grip-initialization src/hidraw-grip-initialization.c 
 
-joycon: joycon-mouse.c udpclient.c uinput-virtual-mouse.c
-	gcc -ggdb -O2 -o joycon joycon-mouse.c udpclient.c uinput-virtual-mouse.c -lm
+joycon: src/joycon-mouse.c src/udpclient.c src/uinput-virtual-mouse.c
+	gcc $(OPT) -o joycon src/joycon-mouse.c src/udpclient.c src/uinput-virtual-mouse.c -lm
 
 

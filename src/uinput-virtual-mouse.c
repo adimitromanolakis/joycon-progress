@@ -226,7 +226,7 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
 
 
 
-     double exp = 1.2;
+     double exp = 1.15;
 
      if(moveX>0) {
         moveX = maxMove*pow(moveX/maxMove,exp);
