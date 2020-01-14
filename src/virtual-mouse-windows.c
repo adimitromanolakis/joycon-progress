@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 
@@ -10,7 +9,11 @@
 #include <fcntl.h>
 #include <math.h>
 
-extern int silent;
+#include <windows.h>
+#include <Winuser.h>
+
+
+int silent = 1;
 
 /* emit function is identical to of the first example */
 void emit(int fd, int type, int code, int val);
@@ -198,6 +201,10 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
       moveX *= 0.17 *1.4;
       moveY *= 0.19 *1.4;
 
+      moveX *= 1.2;
+      moveY *= 1.2;
+
+
       moveX = clamp(moveX, -maxMove, maxMove);
       moveY = clamp(moveY, -maxMove, maxMove);
 
@@ -224,7 +231,7 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
 
 
 
-     double exp = 1.15;
+     double exp = 1.14;
 
      if(moveX>0) {
         moveX = maxMove*pow(moveX/maxMove,exp);
@@ -269,6 +276,8 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
 
 
 
+#define BTN_LEFT 0x8001
+#define BTN_RIGHT 0x8002
 
 
 int button_state[10] = {0,0,0,0,0,0 };
@@ -280,6 +289,27 @@ void button_logic(int num, int state, int event) {
 
       //printf("EMIT %d state=%d", event,state);
 
+       INPUT  Input = { 0 };
+       Input.type = INPUT_MOUSE;
+       
+       if (num == 1) {
+           if (state == 1)
+               Input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+           else
+               Input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+       }
+
+       if (num == 2) {
+           if (state == 1)
+               Input.mi.dwFlags = MOUSEEVENTF_RIGHTDOWN;
+           else
+               Input.mi.dwFlags = MOUSEEVENTF_RIGHTUP;
+       }
+
+
+       SendInput(1, &Input, sizeof(INPUT));
+
+
       //LINUX emit(uinput_fd, EV_KEY, event, state);
       //LINUX emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
 
@@ -289,8 +319,6 @@ void button_logic(int num, int state, int event) {
    }
 }
 
-#define BTN_LEFT 0x8001
-#define BTN_RIGHT 0x8002
 
 
 void uinput_button_press(int num, int state)
@@ -325,8 +353,18 @@ void scroll_up(int scroll_value)
 
 
       //LINUX emit(uinput_fd, EV_REL, REL_WHEEL, distance);
+
+
+
+
       printf("WHEEL MOVE %d\n",distance );
       //LINUX emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
+
+      INPUT    Input = { 0 };
+      Input.type = INPUT_MOUSE;
+      Input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+      Input.mi.mouseData = distance * 70;
+      SendInput(1, &Input, sizeof(INPUT));
    } 
 
    if(scroll_value > 0) {
@@ -343,6 +381,12 @@ void scroll_up(int scroll_value)
       //LINUX emit(uinput_fd, EV_REL, REL_WHEEL, distance);   
       printf("WHEEL MOVE %d\n",distance );
       //LINUX emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
+
+      INPUT    Input = { 0 };
+      Input.type = INPUT_MOUSE;
+      Input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+      Input.mi.mouseData = distance * 70;
+      SendInput(1, &Input, sizeof(INPUT));
 
       }
 }
@@ -478,12 +522,20 @@ void uinput_setup(char *serial_number)
    */
 }
 
+
 void uinput_move(int dx, int dy)
 {
       if(dx >  100) dx =  100;
       if(dy >  100) dy =  100;
       if(dx < -100) dx = -100;
       if(dy < -100) dy = -100;
+
+      INPUT  Input = { 0 };
+      Input.type = INPUT_MOUSE;
+      Input.mi.dwFlags = MOUSEEVENTF_MOVE;
+      Input.mi.dx = dx;
+      Input.mi.dy = dy;
+      SendInput(1, &Input, sizeof(INPUT));
       
       
       //LINUX emit(uinput_fd, EV_REL, REL_X, dx);

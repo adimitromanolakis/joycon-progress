@@ -13,6 +13,14 @@
 #include <time.h>
 #include <stdint.h>
 
+#include "common.h"
+
+const uint16_t NINTENDO = 1406; // 0x057e
+const uint16_t JOYCON_L = 0x2006; // 
+const uint16_t JOYCON_R = 0x2007; //
+const uint16_t JOYCON_GRIP = 0x200e; // 0x200e
+
+
 
 #include <linux/types.h>
 #include <linux/input.h>
@@ -29,6 +37,8 @@
 #define HIDIOCGFEATURE(len)    _IOC(_IOC_WRITE|_IOC_READ, 'H', 0x07, len)
 #endif
 
+int fd;
+
 unsigned char rumble_data[8];
 int cmd_count = 1;
 
@@ -39,6 +49,7 @@ extern unsigned char response[128];
 
 #define DD if(debug_responses) 
 
+extern char supported_device[256];
 
 
 void print_buf(unsigned char *buf, int len) {
@@ -97,6 +108,12 @@ void hid_list()
 			res = ioctl(fd, HIDIOCGRAWINFO, &info);
 
 			fprintf(stderr, "   %s   id %04hx:%04hx  name %s\n", fname, (unsigned int)info.vendor, (unsigned int)info.product, buf);
+
+			if(info.vendor == NINTENDO) {
+				if(info.product == JOYCON_L || info.product == JOYCON_R || info.product == JOYCON_GRIP)
+				if(supported_device[0]==0)
+					strncpy(supported_device, fname, 256);
+			}
 		}
 }
 
@@ -148,7 +165,12 @@ int open_device(char *dev)
 	struct hidraw_devinfo info;
 
     char fname[256];
-	sprintf(fname,"/dev/hidraw%s", dev);
+
+	char *position_ptr = strstr(dev, "hidraw");
+	if(position_ptr == NULL)
+		sprintf(fname,"/dev/hidraw%s", dev);
+	else
+		sprintf(fname,"%s", dev);
 
 	printf("\nOpening device: %s\n",fname);
 
@@ -218,3 +240,9 @@ int read_from_hid(char *buf, int len) {
     return read(fd, buf, len);
 }
 		
+
+
+void close_hid_device()
+{
+    close(fd);
+}

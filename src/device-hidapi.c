@@ -1,9 +1,8 @@
 
-#include <sys/ioctl.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <signal.h>
 #include <time.h>
 #include <stdint.h>
@@ -12,19 +11,30 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <dirent.h>
 
+#include "common.h"
+
+#ifdef __linux__
 #include <hidapi.h>
- 
-#define TRY(A,B) A
-typedef uint8_t u8;
-
-
+#else
+#include <Windows.h>
+#include <hidapi-windows/hidapi.h>
+#include <Windows.h>
+#endif
 
 const uint16_t NINTENDO = 1406; // 0x057e
 const uint16_t JOYCON_L = 0x2006; // 
 const uint16_t JOYCON_R = 0x2007; //
 const uint16_t JOYCON_GRIP = 0x200e; // 0x200e
+
+
+ 
+#define TRY(A,B) A
+typedef uint8_t u8;
+
+int debug_responses;
+uint8_t response[128];
+
 
 extern int fd;
 extern int silent;
@@ -37,6 +47,7 @@ extern unsigned char response[128];
 unsigned char rumble_data[8];
 int cmd_count = 1;
 
+extern char supported_device[256];
 
 void print_buf(unsigned char *buf, int len) {
 		int i;
@@ -48,8 +59,18 @@ void print_buf(unsigned char *buf, int len) {
 
 }
 
+#ifdef __linux
 
-extern char *supported_device[256];
+size_t strncpy_s(char *dst, int n1, char *str, int len) { char *z = strncpy(dst,str,len); return z-dst; }
+
+size_t wcstombs_s(size_t *written, char *dst, int n1, wchar_t *str, int len) 
+{ 
+    size_t l = wcstombs(dst,str,len); 
+    *written = l;
+    return l;
+}
+
+#endif
 
 void hid_list()
 {
@@ -72,7 +93,7 @@ void hid_list()
                 {
                     
                     if(supported_device[0] == 0) {
-                        strncpy(supported_device,dev->path,strlen(dev->path)+1);
+                        strncpy_s(supported_device,256, dev->path,strlen(dev->path)+1);
                         printf("      supported dev=%s\n",supported_device);
                     }
 
@@ -208,7 +229,8 @@ int open_device(char *path)
     char cstr[256];
     hid_get_serial_number_string(dev, (wchar_t*)str, 100);
 
-    int length = wcstombs(cstr,str,256);
+    size_t num;
+    int length = wcstombs_s(&num, cstr,100, str,256);
 
 
     if(strcmp(cstr,"000000000001") == 0) {
@@ -239,10 +261,7 @@ int open_device(char *path)
     }
 }
 
-
-main1()
+void close_hid_device()
 {
-
-    hid_init();
-    hid_list();
+    hid_close(dev);
 }

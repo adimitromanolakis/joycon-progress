@@ -10,7 +10,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <signal.h>
 #include <time.h>
 
@@ -19,16 +18,19 @@
 #include <stdlib.h>
 #include <errno.h>
 
+#include "common.h"
+
+#ifdef __linux__
 #include <sys/time.h>
+#endif
 
 
 
-//extern "C" {
+#ifdef UDP
 extern void udp_init();
 extern void udp_send(char *message);
-//}
+#endif
 
-const char *bus_str(int bus);
 
 int silent = 0;
 int debug_responses = 0;
@@ -38,13 +40,11 @@ int report_type = 8;
 
 extern void hid_list() ;
 extern uint8_t * hid_send_command(int cmd, unsigned char *data, int len);
-extern int open_device(char *fname);
+extern int open_device(char* path);
 extern int read_from_hid(char *buf, int len);
+extern void close_hid_device();
 
-char *supported_device[256];
-
-
-int fd;
+char supported_device[256];
 
 unsigned char response[128];
 
@@ -298,6 +298,7 @@ int main(int argc, char **argv)
 	unsigned char buf[64];
 
 	float scale_factor = 45;
+#ifdef LINUX
 	if(getenv("SCALE")) scale_factor = atof(getenv("SCALE"));
 	
 	if(getenv("FORK")) {
@@ -309,6 +310,7 @@ int main(int argc, char **argv)
 
 		signal(SIGHUP, SIG_IGN);
 	}
+#endif
 
 	
 	if(argc>2) {
@@ -326,10 +328,14 @@ int main(int argc, char **argv)
 	if(argc==1) {
 		printf("Device list:\n");
 		hid_list();
-		exit(0);
+
 	}
 
-	open_device(argv[1]);
+	if(supported_device[0] == 0) 
+	  open_device(argv[1]);
+        else
+          open_device(supported_device);
+
 
 	//char buf9[20] = {01 ,  53, 00, 00, 00, 00, 00 ,00, 00, 00,    0x8, 00}; // erase pairing
 	//write(fd,buf9, 2+8 + 2);
@@ -509,7 +515,7 @@ char link_key_cmd[20] = { 1,2,
 
 
 	int time_sum_n = 0;
-	double time_sum;
+	double time_sum = 0;
 
 
 	int last_packet_time = -9999;
@@ -544,7 +550,7 @@ char link_key_cmd[20] = { 1,2,
 		last_packet_time = time;
 
 
-		double time_spent;
+		double time_spent = 0;
 		time_spent = clock_measure();
 		clock_start();
 		time_sum += time_spent;
@@ -605,7 +611,7 @@ char link_key_cmd[20] = { 1,2,
 
 			printf("G %6d %6d %6d     ", (int)G0,(int)G1,(int) G2); printf(" A %6d %6d %6d  ", (int)A0,(int)A1,(int) A2);
 
-			sprintf(str1 , "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
+			snprintf(str1 , 256, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
 
 			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
 			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
@@ -613,14 +619,14 @@ char link_key_cmd[20] = { 1,2,
 			uinput_update(G0,G1,G2, left?A0:(A0),left?A1:(-A1),left?A2:(-A2));
  			
 			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2); printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
-			sprintf(str2, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
+			snprintf(str2, 256, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
 
 			G0 = p[z++]; G1 = p[z++]; G2 = p[z++];
 			A0 = p[z++]; A1 = p[z++]; A2 = p[z++];
  		
 			printf("  |   %6d %6d %6d     ", (int)G0,(int)G1,(int) G2); printf(" A %6d %6d %6d   ", (int)A0,(int)A1,(int) A2);
 
-			sprintf(str3, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
+			snprintf(str3, 256, "%6d %6d %6d  %6d %6d %6d\n", (int)G0,(int)G1,(int) G2, (int)A0, (int)A1, (int)A2 );
 
 
 			#ifdef UDP
@@ -650,7 +656,7 @@ char link_key_cmd[20] = { 1,2,
 				//printf("G %6d %6d %6d     ", (int)G0[i],(int)G1[i],(int) G2[i]); 
 				//printf(" A %6d %6d %6d  ",   (int)A0[i],(int)A1[i],(int) A2[i]);
 
-				sprintf(udp_string[i], "%6d %6d %6d  %6d %6d %6d\n", 
+				snprintf(udp_string[i],256, "%6d %6d %6d  %6d %6d %6d\n", 
 				(int)G0[i],(int)G1[i],(int) G2[i],
 				(int)A0[i],(int)A1[i],(int) A2[i] );
 			}
@@ -695,7 +701,6 @@ char link_key_cmd[20] = { 1,2,
 		if(!silent) printf("\n");
 	}
 
-
-	close(fd);
+	close_hid_device();
 	return 0;
 }
