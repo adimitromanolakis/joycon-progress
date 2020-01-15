@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <math.h>
+#include <stdint.h>
+
 
 extern int silent;
 
@@ -23,6 +25,13 @@ int after_button_delay = 0;
 
 
 int pG0 = 0, pG1 = 0, pG2 = 0;
+
+
+// Button binding configuration
+double mouse_speed = 1.2, mouse_expo = 1.2;
+double wheel_move_amount = 1, wheel_move_fast_amount = 3;
+uint32_t button_bindings[20];
+
 
 void uinput_move(int dx, int dy);
 
@@ -96,8 +105,8 @@ void uinput_update_v1(int G0,int G1,int G2, int A0, int A1, int A2)
       
     if(!silent) printf("Move: G1=%5d %5.2f %5.2f ", pG1, moveX,moveY);
 
-    moveX *= 0.17 *1.3;
-    moveY *= 0.19 *1.3;
+    moveX *= 0.17 *1.5;
+    moveY *= 0.19 *2.5;
 
     moveX = clamp(moveX, -maxMove, maxMove);
     moveY = clamp(moveY, -maxMove, maxMove);
@@ -116,15 +125,17 @@ void uinput_update_v1(int G0,int G1,int G2, int A0, int A1, int A2)
      oo  if(A2 >   400) moveX *= 1.1;
      oo  if(A2 <  -400) moveX *= 1.1;
 
-    if(A2 >   950) moveX *=1.7;
-    if(A2 <  -950) moveX *=1.7;
+    if(A2 >   1500) moveX *=1.4;
+    if(A2 <  -1500) moveX *=1.4;
+ if(A2 >   7000) moveX *=1.6;
+    if(A2 <  -7000) moveX *=1.6;
 
 
      //if(moveX>0.2) moveX +=0.7;
      //if(moveX< -0.2) moveX-=0.7;
      
 
-     double exp = 1.1;
+     double exp = 1.05;
 
     if(moveX>0) {
         moveX = maxMove*pow(moveX/maxMove,exp);
@@ -195,11 +206,17 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
       //float mult = 0.1;
       //moveX += 0.11;
       
-      if(!silent) printf("Move: G1=%5d %5.2f %5.2f ", pG1, moveX,moveY);
+    
+      moveX *= 0.17 *1.7;
+      moveY *= 0.19 *1.7;
 
-      moveX *= 0.17 *1.4;
-      moveY *= 0.19 *1.4;
+      //moveX *= 1.2;
+      //moveY *= 1.2;
 
+      moveX *= mouse_speed;
+      moveY *= mouse_speed;
+
+   
       moveX = clamp(moveX, -maxMove, maxMove);
       moveY = clamp(moveY, -maxMove, maxMove);
 
@@ -217,16 +234,19 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
     oo  if(A2 >   400) moveX *= 1.1;
     oo  if(A2 <  -400) moveX *= 1.1;
 
-      if(A2 >   950) moveX *=1.7;
-      if(A2 <  -950) moveX *=1.7;
- 
+    if(A2 >   900) moveX *=1.5;
+    if(A2 <  -900) moveX *=1.5;
+    //if(A2 >   7000) moveX *=1.4;
+   // if(A2 <  -7000) moveX *=1.4;
+
 
      //if(moveX>0.2) moveX +=0.7;
      //if(moveX< -0.2) moveX-=0.7;
 
+      //printf("%d %d %d => move: %f %f param=%f %f\n", A0,A1,A2, moveX,moveY, mouse_speed,mouse_expo);
 
-
-     double exp = 1.15;
+     //double exp = 1.1;
+      double exp = mouse_expo;
 
      if(moveX>0) {
         moveX = maxMove*pow(moveX/maxMove,exp);
@@ -260,11 +280,11 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
 
       }
 
-    if(!silent)  printf(" =>%5.2f %5.2f ", moveX,moveY);
+   //if(!silent || 1)   printf("%6d %6d %6d  =>%5.2f %5.2f\n", A0,A1,A2, moveX,moveY);
 
      // if(abs(moveX)<0.4) moveX =0;
 
-      uinput_move((int) ( 0.5 + moveX) , (int) (0.5+moveY));
+   uinput_move((int) ( 0.5 + moveX) , (int) (0.5+moveY));
   
 }
 
@@ -275,6 +295,7 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
 
 int button_state[10] = {0,0,0,0,0,0 };
 
+inline
 void button_logic(int num, int state, int event) {
    state = state > 0 ? 1: 0;
 
@@ -295,10 +316,23 @@ void button_logic(int num, int state, int event) {
 
 void uinput_button_press(int num, int state)
 {
-   //printf(" BUT=%x\n", state);
+ //  printf(" BUT=%x  %x\n", state, button_bindings[1]);
 
+ button_logic(1, state & button_bindings[1] , BTN_LEFT);
+ button_logic(2, state & button_bindings[2] , BTN_RIGHT);
+
+ button_logic(3, state & button_bindings[3] , KEY_UP);
+ button_logic(4, state & button_bindings[4] , KEY_DOWN);
+ button_logic(5, state & button_bindings[5] , KEY_PAGEUP);
+ button_logic(6, state & button_bindings[6] , KEY_PAGEDOWN);
+
+#if 0
    button_logic(1, state & (0x40 | 0x80 | 0x2 | 0x20000 | 0x400000 | 0x800000 ), BTN_LEFT);
    button_logic(2, state & ( 0x200 | 0x100 | 0x1 | 0x40000 ) , BTN_RIGHT);
+   
+   button_logic(3, state & ( 0x10000 ) , KEY_UP);
+   button_logic(4, state & ( 0x80000 ) , KEY_DOWN);
+#endif
 }
 
 
@@ -437,10 +471,12 @@ void emit(int fd, int type, int code, int val)
 }
 
 
-
+int read_config_file();
 void uinput_setup(char *serial_number)
 {
    int i = 50;
+
+   read_config_file();
 
    uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
 
@@ -452,6 +488,8 @@ void uinput_setup(char *serial_number)
 
    ioctl(uinput_fd, UI_SET_KEYBIT, KEY_UP);
    ioctl(uinput_fd, UI_SET_KEYBIT, KEY_DOWN);
+   ioctl(uinput_fd, UI_SET_KEYBIT, KEY_PAGEDOWN);
+   ioctl(uinput_fd, UI_SET_KEYBIT, KEY_PAGEUP);
    
 
    ioctl(uinput_fd, UI_SET_EVBIT, EV_REL);

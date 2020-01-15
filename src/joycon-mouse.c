@@ -641,6 +641,8 @@ char link_key_cmd[20] = { 1,2,
 
 	if(report_type & 8) {
 
+			uinput_button_press(1, (buf[3]<<16) | (buf[4]<<8) | buf[5]);
+
 			int z=0;
 			char udp_string[3][256];
 			int G0[3],G1[3],G2[3];
@@ -676,7 +678,6 @@ char link_key_cmd[20] = { 1,2,
 
 			int pos = ( left == 1 ) ? 5 : 3;
 			
-			uinput_button_press(1, (buf[3]<<16) | (buf[4]<<8) | buf[5]);
 
 			uint8_t *data = buf + (left ? 6 : 9);
 			uint16_t stick_horizontal =  (uint16_t)data[0] | (((int)data[1] & 0xF) << 8);

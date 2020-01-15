@@ -22,7 +22,7 @@ else
 endif
 
 
-SRC=src/joycon-mouse.c src/udpclient.c
+SRC=src/joycon-mouse.c src/udpclient.c src/configuration.c
 SRC+=$(DEVICE)
 SRC+=$(VIRTUAL_MOUSE)
 
