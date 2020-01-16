@@ -18,7 +18,7 @@
 #include <hidapi.h>
 #else
 #include <Windows.h>
-#include <hidapi-windows/hidapi.h>
+#include "hidapi-windows/hidapi.h"
 #include <Windows.h>
 #endif
 

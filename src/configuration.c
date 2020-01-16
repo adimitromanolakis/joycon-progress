@@ -1,45 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
+#include <ctype.h> 
 
-#include "slre/slre.h"
-#include "slre/slre.c"
+//#include "slre/slre.h"
+//#include "slre/slre.c"
 
-struct cap matches[4 + 1];
-
-char str[3][200];
-
-int spc(char c) { return c == '\t' || c== ' '; }
-
-int matcher(char *buf, int len)
-{
-    char *p;
-    int i = 0;
-
-    while(i < len && spc(buf[i])) i++;
-
-    p = str[0];
-    while(i < len && !spc(buf[i]) && buf[i] != '=') {
-        p[0] = buf[i]; p++; i++; 
-    }
-    p[0] = 0;
-
-    while(i < len && spc(buf[i])) i++;
-    //while(i < len && buf[i] == '=') i++;
-    //while(i < len && spc(buf[i])) i++;
-
-    p = str[1]; 
-    while(i < len && !spc(buf[i])) { p[0] = buf[i]; p++; i++; } 
-    p[0] = 0;
-
-    while(i < len && spc(buf[i])) i++;
-
-    p = str[2]; 
-    while(i < len && !spc(buf[i])) { p[0] = buf[i]; p++; i++; } 
-    p[0] = 0;
-
-    return 1;
-}
+//struct cap matches[4 + 1];
 
 
 
@@ -100,10 +68,65 @@ extern double wheel_move_fast_amount;
 extern uint32_t button_bindings[20];
 
 
+char str[3][200];
+
+int spc(char c) { return c == '\t' || c== ' '; }
+
+int matcher(char *buf, int len)
+{
+    char *p;
+    int i = 0;
+
+    while(i < len && spc(buf[i])) i++;
+
+    p = str[0];
+    while(i < len && !spc(buf[i]) && buf[i] != '=') {
+        p[0] = buf[i]; p++; i++; 
+    }
+    p[0] = 0;
+
+    while(i < len && spc(buf[i])) i++;
+    //while(i < len && buf[i] == '=') i++;
+    //while(i < len && spc(buf[i])) i++;
+
+    p = str[1]; 
+    while(i < len && !spc(buf[i])) { p[0] = buf[i]; p++; i++; } 
+    p[0] = 0;
+
+    while(i < len && spc(buf[i])) i++;
+
+    p = str[2]; 
+    while(i < len && !spc(buf[i])) { p[0] = buf[i]; p++; i++; } 
+    p[0] = 0;
+
+    return 1;
+}
+
+void
+get_config_file_name(char *buf)
+{
+
+    
+
+
+}
+
+char config_file[256] = "config.txt";
+
 int
 read_config_file()
 {
-    FILE *f = fopen("config.txt", "r");
+    FILE* f;
+    #ifdef __linux__
+    f = fopen(config_file, "r");
+    #else
+    fopen_s(&f, config_file, "r");
+    #endif
+
+    if(!f) {
+        fprintf(stderr,"Cannot open configuration file: %s", config_file);
+        exit(1);
+    }
 
     char *fgets(char *s, int size, FILE *stream);
     char buf[256];
@@ -113,10 +136,11 @@ read_config_file()
     while (fgets(buf, 256, f) != NULL)
     {
         for(int i=0;i<strlen(buf);i++) buf[i] = toupper(buf[i]);
-
+        for(int i=0;i<strlen(buf);i++) if(buf[i] == '#') buf[i] = 0;
+        
         if (buf[strlen(buf) - 1] == '\n') buf[strlen(buf) - 1] = 0;
 
-        int ret = matcher(buf,strlen(buf));
+        int ret = matcher(buf,(int)strlen(buf));
 
         if(0) printf("MY  /%s/   /%s/ /%s/ %d %d\n", str[0],str[1],str[2],
             string_map_virtual(str[1]),

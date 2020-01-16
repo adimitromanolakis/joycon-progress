@@ -26,13 +26,19 @@ SRC=src/joycon-mouse.c src/udpclient.c src/configuration.c
 SRC+=$(DEVICE)
 SRC+=$(VIRTUAL_MOUSE)
 
-default: hidraw-grip-initialization joycon
+default: hidraw-grip-initialization joycon joycon-agent
+
 
 hidraw-grip-initialization: src/hidraw-grip-initialization.c
 	gcc $(OPT) -o hidraw-grip-initialization src/hidraw-grip-initialization.c 
 
+
 joycon: $(SRC)
 	gcc $(OPT) -o joycon $(SRC) -lm $(LIBS)
+
+
+joycon-agent: src/joycon-agent.c
+	gcc $(OPT) -o joycon-agent src/joycon-agent.c -lm
 
 
 hid1: hid1.c

@@ -105,8 +105,8 @@ void uinput_update_v1(int G0,int G1,int G2, int A0, int A1, int A2)
       
     if(!silent) printf("Move: G1=%5d %5.2f %5.2f ", pG1, moveX,moveY);
 
-    moveX *= 0.17 *1.5;
-    moveY *= 0.19 *2.5;
+    moveX *= 0.17 *1.3;
+    moveY *= 0.19 *1.3;
 
     moveX = clamp(moveX, -maxMove, maxMove);
     moveY = clamp(moveY, -maxMove, maxMove);
@@ -125,17 +125,15 @@ void uinput_update_v1(int G0,int G1,int G2, int A0, int A1, int A2)
      oo  if(A2 >   400) moveX *= 1.1;
      oo  if(A2 <  -400) moveX *= 1.1;
 
-    if(A2 >   1500) moveX *=1.4;
-    if(A2 <  -1500) moveX *=1.4;
- if(A2 >   7000) moveX *=1.6;
-    if(A2 <  -7000) moveX *=1.6;
+    if(A2 >   950) moveX *=1.7;
+    if(A2 <  -950) moveX *=1.7;
 
 
      //if(moveX>0.2) moveX +=0.7;
      //if(moveX< -0.2) moveX-=0.7;
      
 
-     double exp = 1.05;
+     double exp = 1.1;
 
     if(moveX>0) {
         moveX = maxMove*pow(moveX/maxMove,exp);
@@ -202,7 +200,7 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
       float moveY = (float)A1/80;
 
 
-      float maxMove = 18*3;
+      float maxMove = 18*5;
       //float mult = 0.1;
       //moveX += 0.11;
       
@@ -262,7 +260,7 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
      }
 
 
-    // printf("move=%10.4f %10.4f\n",moveX,moveY);
+     //printf("move=%10.4f %10.4f\n",moveX,moveY);
      
       if(after_button_delay > 0) {
          defered_move_x += moveX;
@@ -284,7 +282,7 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
 
      // if(abs(moveX)<0.4) moveX =0;
 
-   uinput_move((int) ( 0.5 + moveX) , (int) (0.5+moveY));
+   uinput_move((int)round(1.2*moveX) , (int) round(1.2*moveY));
   
 }
 
@@ -306,7 +304,8 @@ void button_logic(int num, int state, int event) {
       emit(uinput_fd, EV_KEY, event, state);
       emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
 
-      if(state==1) after_button_delay = 12;
+      // For mouse button, delay pointer movement after a button press
+      if(num==1 || num==2) if(state==1) after_button_delay = 12;
 
       button_state[num] = state;
    }
@@ -359,7 +358,7 @@ void scroll_up(int scroll_value)
 
 
       emit(uinput_fd, EV_REL, REL_WHEEL, distance);
-      printf("WHEEL MOVE %d\n",distance );
+      // printf("WHEEL MOVE %d\n",distance );
       emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
    } 
 
@@ -520,6 +519,7 @@ void uinput_move(int dx, int dy)
       if(dy >  100) dy =  100;
       if(dx < -100) dx = -100;
       if(dy < -100) dy = -100;
+   
       
       emit(uinput_fd, EV_REL, REL_X, dx);
       emit(uinput_fd, EV_REL, REL_Y, dy);

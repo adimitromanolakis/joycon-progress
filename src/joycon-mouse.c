@@ -53,13 +53,15 @@ extern void print_buf(unsigned char *buf, int len);
 
 
 void
-print_bar(int value)
+print_bar(float value_f)
 {
+	int value = (int)(value_f + 0.5);
+
 	const int length = 20;
 	const char dots = 'F';
 
 	char str[256];
-	int i,j;
+	int i;
 
 	memset(str, ' ', 2*length+1);
 
@@ -201,7 +203,7 @@ struct stick_calib calib_left, calib_right;
 
 
 void stick_calib_init(struct stick_calib *s, int isleft, unsigned char *stick_cal) {
-		uint16_t data[6];
+	// uint16_t data[6];
 
 	int d0 = ((stick_cal[7] << 8) & 0xf00) | stick_cal[6]; // X Min below center
 	int d1  = ((stick_cal[8] << 4) | (stick_cal[7] >> 4));  // Y Min below center
@@ -262,21 +264,28 @@ void read_calibration()
 }
 
 
-
-
-
+#ifdef __linux__
 
 struct timeval  tv1, tv2;
+#endif
 
-void clock_start() { gettimeofday(&tv1, NULL); }
+
+void clock_start() { 
+#ifdef __linux__
+	gettimeofday(&tv1, NULL); 
+#endif
+}
 
 double clock_measure() {
-
+#ifdef __linux__
 	gettimeofday(&tv2, NULL);
 
 	double time =          (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
          (double) (tv2.tv_sec - tv1.tv_sec);
 		 return time;
+#else
+	return 1;
+#endif
 }
 
 
@@ -331,7 +340,7 @@ int main(int argc, char **argv)
 
 	}
 
-	if(supported_device[0] == 0) 
+	if(supported_device[0] == 0 && argc>1)
 	  open_device(argv[1]);
         else
           open_device(supported_device);
@@ -437,21 +446,24 @@ char link_key_cmd[20] = { 1,2,
 
 	uint8_t * r;
 	
+	
 	//while(1) { read(fd,response,64); print_buf(response,50); if(response[0] == 0x21 && response[14]==0x41) break; }
 	{ 
 		r = hid_send_command_1(1, 0x50);
 		int b = 2.5 * ( (  (int)r[1] ) << 8 | ((int)r[0]) );
 		float voltage = (float)b/1000;
-		fprintf(stderr, "Battery Voltage=%.4f PERCENT=%2.1f\n", voltage,  100*(voltage-3.2)/(4.1-3.2) ) ;
+		fprintf(stderr, "Battery Voltage   %.4fV   (%2.1f%%)\n", voltage,  100*(voltage-3.2)/(4.1-3.2) ) ;
 	}
 
 
 	{
 		uint8_t *p = hid_send_command_1( 1, 0x02);
-		printf("Firmware version = %d.%d  Joycon type=%d \n", (int)p[0],(int)p[1], (int)p[2]   );
+		printf("Firmware version = %d.%d  Joycon type %s \n", (int)p[0],(int)p[1],  p[2]==1?"Left":"Right"   );
 		joycon_type = p[2];
 	}
 
+	fprintf(stderr, "\n");
+	
 	int left = joycon_type == 1;
 
 	uint8_t serial_number[17];

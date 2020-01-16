@@ -9,11 +9,13 @@
 #include <fcntl.h>
 #include <math.h>
 
+#include <stdint.h>
+
 #include <windows.h>
 #include <Winuser.h>
 
 
-int silent = 1;
+extern int silent;
 
 /* emit function is identical to of the first example */
 void emit(int fd, int type, int code, int val);
@@ -24,6 +26,13 @@ int after_button_delay = 0;
 
 
 int pG0 = 0, pG1 = 0, pG2 = 0;
+
+
+// Button binding configuration
+double mouse_speed = 1.2, mouse_expo = 1.2;
+double wheel_move_amount = 1, wheel_move_fast_amount = 3;
+uint32_t button_bindings[20];
+
 
 void uinput_move(int dx, int dy);
 
@@ -204,6 +213,9 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
       moveX *= 1.2;
       moveY *= 1.2;
 
+      moveX *= mouse_speed;
+      moveY *= mouse_speed;
+
 
       moveX = clamp(moveX, -maxMove, maxMove);
       moveY = clamp(moveY, -maxMove, maxMove);
@@ -213,8 +225,8 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
      oo  if(A1 > 120) moveY += 0.3;
      oo  if(A1 < -120) moveY -= 0.3;
 
-     oo  if(A2 > 320) moveX -= 0.3;
-     oo   if(A2 < -320) moveX += 0.3   ;
+       if(A1 > 5320) moveY *= 1.2;
+       if(A1 < -5320) moveY *= 1.2; 
 
     //if(A1 >   300) moveY +=1;
     //if(A1 <  -300) moveY -=1;
@@ -226,12 +238,17 @@ void uinput_update_1(int G0,int G1,int G2, int A0, int A1, int A2)
       if(A2 <  -950) moveX *=1.7;
  
 
-     //if(moveX>0.2) moveX +=0.7;
-     //if(moveX< -0.2) moveX-=0.7;
+   
 
+     // if (A2 > 6950) moveX *= 1.2;
+     //      if (A2 < -6950) moveX *= 1.2;
+      
+
+     //printf("Move: %6d %6d %6d move = %5.2f %5.2f \n", A0, A1, A2, moveX, moveY);
 
 
      double exp = 1.14;
+     exp = mouse_expo;
 
      if(moveX>0) {
         moveX = maxMove*pow(moveX/maxMove,exp);
@@ -306,6 +323,30 @@ void button_logic(int num, int state, int event) {
                Input.mi.dwFlags = MOUSEEVENTF_RIGHTUP;
        }
 
+       if (num > 3) {
+           Input.type = INPUT_KEYBOARD;
+           if (state == 1)
+               Input.ki.dwFlags = 0;
+           else
+               Input.ki.dwFlags = KEYEVENTF_KEYUP;
+
+           Input.ki.wScan = 0x45;
+
+       }
+
+
+
+       if (num == 5) Input.ki.wVk = VK_PRIOR;
+       if (num == 6) {
+           printf("NEXT KEY\n"); Input.ki.wVk = VK_NEXT;
+       }
+
+
+       if (num > 3) {
+           Input.ki.wScan = MapVirtualKey(Input.ki.wVk, MAPVK_VK_TO_VSC);
+           Input.ki.time = 0;
+           Input.ki.dwExtraInfo = 0;
+       }
 
        SendInput(1, &Input, sizeof(INPUT));
 
@@ -313,6 +354,7 @@ void button_logic(int num, int state, int event) {
       //LINUX emit(uinput_fd, EV_KEY, event, state);
       //LINUX emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
 
+      if(num==1 || num==2)
       if(state==1) after_button_delay = 12;
 
       button_state[num] = state;
@@ -325,8 +367,12 @@ void uinput_button_press(int num, int state)
 {
    //printf(" BUT=%x\n", state);
 
-   button_logic(1, state & (0x40 | 0x80 | 0x2 | 0x20000 | 0x400000 | 0x800000 ), BTN_LEFT);
-   button_logic(2, state & ( 0x200 | 0x100 | 0x1 | 0x40000 ) , BTN_RIGHT);
+   //button_logic(1, state & (0x40 | 0x80 | 0x2 | 0x20000 | 0x400000 | 0x800000 ), BTN_LEFT);
+   //button_logic(2, state & ( 0x200 | 0x100 | 0x1 | 0x40000 ) , BTN_RIGHT);
+
+    for (int i = 1;i <= 6;i++) {
+        button_logic(i, state & button_bindings[i], i);
+   }
 }
 
 
@@ -352,13 +398,7 @@ void scroll_up(int scroll_value)
       } else stick_up_count = 0;
 
 
-      //LINUX emit(uinput_fd, EV_REL, REL_WHEEL, distance);
-
-
-
-
-      printf("WHEEL MOVE %d\n",distance );
-      //LINUX emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
+     //printf("WHEEL MOVE %d\n",distance );
 
       INPUT    Input = { 0 };
       Input.type = INPUT_MOUSE;
@@ -378,9 +418,7 @@ void scroll_up(int scroll_value)
    
       } else stick_down_count = 0;
 
-      //LINUX emit(uinput_fd, EV_REL, REL_WHEEL, distance);   
-      printf("WHEEL MOVE %d\n",distance );
-      //LINUX emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
+      //printf("WHEEL MOVE %d\n",distance );
 
       INPUT    Input = { 0 };
       Input.type = INPUT_MOUSE;
@@ -430,7 +468,6 @@ void uinput_stick( int stick_horizontal, int stick_vertical)
    } else {
 
       if(down_k==1) {
-         if(!silent) printf("KEYDOWN OFF ");
          down_k = 0;
       }
    }
@@ -438,7 +475,6 @@ void uinput_stick( int stick_horizontal, int stick_vertical)
    if(scroll_value > 0) {
     
       if(up_k==0) {
-         //emit(uinput_fd, EV_KEY, KEY_UP, 1);
          if(scroll_value == 1) scroll_up(scroll_value);
 
          up_k = 1;
@@ -457,8 +493,6 @@ void uinput_stick( int stick_horizontal, int stick_vertical)
       //Repeat
 
       if(up_k==1) {
-         //emit(uinput_fd, EV_KEY, KEY_UP, 0);
-         //emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
          up_k = 0;
       }
    }
@@ -468,58 +502,16 @@ void uinput_stick( int stick_horizontal, int stick_vertical)
 
 void emit(int fd, int type, int code, int val)
 {
-  /*  struct input_event ie;
 
-   ie.type = type;
-   ie.code = code;
-   ie.value = val;
-   // timestamp values below are ignored
-   ie.time.tv_sec = 0;
-   ie.time.tv_usec = 0;
-
-   int ret = write(fd, &ie, sizeof(ie));
-   */
 }
 
 
+int read_config_file();
 
 void uinput_setup(char *serial_number)
 {
-  /* int i = 50;
+    read_config_file();
 
-   uinput_fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
-
-   // enable mouse button left and relative events 
-   ioctl(uinput_fd, UI_SET_EVBIT, EV_KEY);
-   ioctl(uinput_fd, UI_SET_KEYBIT, BTN_LEFT);
-   ioctl(uinput_fd, UI_SET_KEYBIT, BTN_RIGHT);
-   ioctl(uinput_fd, UI_SET_KEYBIT, BTN_MIDDLE);
-
-   ioctl(uinput_fd, UI_SET_KEYBIT, KEY_UP);
-   ioctl(uinput_fd, UI_SET_KEYBIT, KEY_DOWN);
-   
-
-   ioctl(uinput_fd, UI_SET_EVBIT, EV_REL);
-   ioctl(uinput_fd, UI_SET_RELBIT, REL_X);
-   ioctl(uinput_fd, UI_SET_RELBIT, REL_Y);
-   ioctl(uinput_fd, UI_SET_RELBIT, REL_WHEEL);
-
-
-
-    memset(&uidev, 0, sizeof(uidev));
-
-    snprintf(uidev.name, UINPUT_MAX_NAME_SIZE, "Joy-Con Gyro Mouse %s", serial_number);
-
-    uidev.id.bustype = BUS_USB;
-    uidev.id.vendor  = 0x1;
-    uidev.id.product = 0x1;
-    uidev.id.version = 1;
-
-    if(write(uinput_fd, &uidev, sizeof(uidev)) < 0)
-        printf("error: write");
-
-   ioctl(uinput_fd, UI_DEV_CREATE);
-   */
 }
 
 
@@ -536,11 +528,7 @@ void uinput_move(int dx, int dy)
       Input.mi.dx = dx;
       Input.mi.dy = dy;
       SendInput(1, &Input, sizeof(INPUT));
-      
-      
-      //LINUX emit(uinput_fd, EV_REL, REL_X, dx);
-      //LINUX emit(uinput_fd, EV_REL, REL_Y, dy);
-      //LINUX emit(uinput_fd, EV_SYN, SYN_REPORT, 0);
+     
 }
 
 
